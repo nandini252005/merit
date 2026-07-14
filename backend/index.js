@@ -213,7 +213,7 @@ const {
 
 // Simulate a weekly repayment — 'paid' or 'missed'
 app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
-  const { outcome } = req.body; // expects "paid" or "missed"
+  const { outcome } = req.body;
   if (!['paid', 'missed'].includes(outcome)) {
     return res.status(400).json({ error: 'outcome must be "paid" or "missed"' });
   }
@@ -226,10 +226,29 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
   const isClusterOrigin = analysis && analysis.cluster_used === 1;
   const multiplier = isClusterOrigin ? 1.5 : 1;
 
-  // Base impact per our locked rules
-  let baseImpact = outcome === 'paid'
-    ? Math.floor(Math.random() * 3) + 2   // +2 to +4
-    : -(Math.floor(Math.random() * 8) + 8); // -8 to -15
+  // Get this shop's repayment history to determine streak/repeat counts
+  const allRepaymentsForShop = db.prepare(`
+    SELECT r.status FROM repayments r
+    JOIN loans l ON l.id = r.loan_id
+    WHERE l.shop_id = ? AND r.status IN ('paid', 'missed')
+    ORDER BY r.id ASC
+  `).all(loan.shop_id);
+
+  let baseImpact;
+
+  if (outcome === 'paid') {
+    // Count current consecutive on-time streak (including this one)
+    let streak = 1;
+    for (let i = allRepaymentsForShop.length - 1; i >= 0; i--) {
+      if (allRepaymentsForShop[i].status === 'paid') streak++;
+      else break;
+    }
+    baseImpact = streak >= 5 ? 4 : streak >= 3 ? 3 : 2;
+  } else {
+    // Count total missed payments including this one
+    const missedCount = allRepaymentsForShop.filter(r => r.status === 'missed').length + 1;
+    baseImpact = missedCount >= 3 ? -15 : missedCount === 2 ? -11 : -8;
+  }
 
   const finalImpact = Math.round(baseImpact * multiplier);
 
@@ -244,7 +263,6 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
 
   logTrustScoreChange(loan.shop_id, newScore, reason);
 
-  // Check if this was the loan's final week and all weeks are paid — mark loan completed
   const allRepayments = db.prepare(`SELECT status FROM repayments WHERE loan_id = ?`).all(loan.id);
   const allPaid = allRepayments.every(r => r.status === 'paid');
   if (allPaid) {
@@ -266,6 +284,12 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
 // View a shop's trust score history over time
 app.get('/api/shops/:shopId/trust-history', (req, res) => {
   res.json(getTrustScoreHistory(req.params.shopId));
+});
+
+const { getDashboardStats } = require('./loanHelpers');
+
+app.get('/api/dashboard/stats', (req, res) => {
+  res.json(getDashboardStats());
 });
 
 app.listen(PORT, () => {
