@@ -2,10 +2,10 @@ const db = require('./database');
 
 function createLoanApplication({ analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, distributor_name }) {
   const stmt = db.prepare(`
-    INSERT INTO loans (analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, status)
-    VALUES (@analysis_id, @shop_id, @shop_name, @amount, @tenure_weeks, @interest_tier, 'pending')
+    INSERT INTO loans (analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, distributor_name, status)
+    VALUES (@analysis_id, @shop_id, @shop_name, @amount, @tenure_weeks, @interest_tier, @distributor_name, 'pending')
   `);
-  const info = stmt.run({ analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier });
+  const info = stmt.run({ analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, distributor_name });
   return info.lastInsertRowid;
 }
 

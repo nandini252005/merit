@@ -30,6 +30,7 @@ db.exec(`
     amount INTEGER,
     tenure_weeks INTEGER,
     interest_tier TEXT,
+    distributor_name TEXT,
     status TEXT DEFAULT 'pending',
     applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     approved_at DATETIME,

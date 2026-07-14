@@ -151,13 +151,13 @@ const {
 
 // Shop owner applies for the loan Agent 3 recommended
 app.post('/api/loans/apply', (req, res) => {
-  const { analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier } = req.body;
+  const { analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, distributor_name } = req.body;
 
-  if (!analysis_id || !shop_id || !amount) {
-    return res.status(400).json({ error: 'Missing required loan fields' });
+  if (!analysis_id || !shop_id || !amount || !distributor_name) {
+    return res.status(400).json({ error: 'Missing required loan fields, including distributor_name' });
   }
 
-  const loan_id = createLoanApplication({ analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier });
+  const loan_id = createLoanApplication({ analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, distributor_name });
   res.json({ message: 'Loan application submitted', loan_id, status: 'pending' });
 });
 
@@ -182,7 +182,7 @@ app.post('/api/loans/:loanId/approve', (req, res) => {
   createRepaymentSchedule(loan.id, loan.amount, loan.tenure_weeks, shop ? shop.weekly_orders : []);
 
   res.json({
-    message: `Loan approved. ₹${loan.amount} disbursed to ${shop.distributor_name} on behalf of ${loan.shop_name}.`,
+    message: `Loan approved. ₹${loan.amount} disbursed to ${loan.distributor_name} on behalf of ${loan.shop_name}.`,
     loan_id: loan.id,
     status: 'active'
   });
