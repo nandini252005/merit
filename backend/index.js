@@ -79,9 +79,11 @@ app.get('/api/analyze/:shopId', async (req, res) => {
   if (!shop) {
     return res.status(404).json({ error: 'Shop not found' });
   }
+  const { getCurrentTrustScore } = require('./loanHelpers');
 
   try {
-    const profileResult = await runProfileAgent(shop);
+    const existingScore = getCurrentTrustScore(shop.shop_id);
+const profileResult = await runProfileAgent(shop, existingScore);
 
     const clusterResult = profileResult.trust_score <= 30
       ? await runClusterAgent(shop, shops)
@@ -157,6 +159,21 @@ app.post('/api/loans/apply', (req, res) => {
     return res.status(400).json({ error: 'Missing required loan fields, including distributor_name' });
   }
 
+  const status = getShopStatus(shop_id);
+
+  if (status.eligibility === 'PENDING_REVIEW') {
+    return res.status(409).json({ error: 'You already have a loan application awaiting review.' });
+  }
+  if (status.eligibility === 'ACTIVE') {
+    return res.status(409).json({ error: 'You have an active loan. Complete it before applying again.' });
+  }
+  if (status.eligibility === 'OVERDUE') {
+    return res.status(409).json({ error: 'Your current loan has an overdue payment. Catch up before applying again.' });
+  }
+  if (status.eligibility === 'DEFAULTED') {
+    return res.status(409).json({ error: `Not eligible yet: ${status.recovery_needed}` });
+  }
+
   const loan_id = createLoanApplication({ analysis_id, shop_id, shop_name, amount, tenure_weeks, interest_tier, distributor_name });
   res.json({ message: 'Loan application submitted', loan_id, status: 'pending' });
 });
@@ -212,6 +229,8 @@ const {
 } = require('./loanHelpers');
 
 // Simulate a weekly repayment — 'paid' or 'missed'
+const { getNextActionableRepayment } = require('./loanHelpers');
+
 app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
   const { outcome } = req.body;
   if (!['paid', 'missed'].includes(outcome)) {
@@ -222,11 +241,21 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
   if (!repayment) return res.status(404).json({ error: 'Repayment not found' });
 
   const loan = getLoanById(repayment.loan_id);
+
+ if (!['active', 'overdue', 'defaulted'].includes(loan.status)) {
+  return res.status(409).json({ error: `This loan is ${loan.status}; repayments cannot be modified.` });
+}
+
+  // Enforce sequential order — only the current lowest pending week is actionable
+  const nextActionable = getNextActionableRepayment(loan.id);
+  if (!nextActionable || nextActionable.id !== repayment.id) {
+    return res.status(409).json({ error: 'Repayments must be completed in order. This week is not yet actionable.' });
+  }
+
   const analysis = getAnalysisById(loan.analysis_id);
   const isClusterOrigin = analysis && analysis.cluster_used === 1;
   const multiplier = isClusterOrigin ? 1.5 : 1;
 
-  // Get this shop's repayment history to determine streak/repeat counts
   const allRepaymentsForShop = db.prepare(`
     SELECT r.status FROM repayments r
     JOIN loans l ON l.id = r.loan_id
@@ -235,19 +264,20 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
   `).all(loan.shop_id);
 
   let baseImpact;
+  let newConsecutiveMissed = loan.consecutive_missed || 0;
 
   if (outcome === 'paid') {
-    // Count current consecutive on-time streak (including this one)
     let streak = 1;
     for (let i = allRepaymentsForShop.length - 1; i >= 0; i--) {
       if (allRepaymentsForShop[i].status === 'paid') streak++;
       else break;
     }
     baseImpact = streak >= 5 ? 4 : streak >= 3 ? 3 : 2;
+    newConsecutiveMissed = 0; // paying resets the consecutive-miss counter
   } else {
-    // Count total missed payments including this one
     const missedCount = allRepaymentsForShop.filter(r => r.status === 'missed').length + 1;
     baseImpact = missedCount >= 3 ? -15 : missedCount === 2 ? -11 : -8;
+    newConsecutiveMissed = newConsecutiveMissed + 1;
   }
 
   const finalImpact = Math.round(baseImpact * multiplier);
@@ -255,17 +285,64 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
   updateRepayment(repayment.id, outcome, finalImpact);
 
   const currentScore = getCurrentTrustScore(loan.shop_id);
-  const newScore = Math.max(0, Math.min(100, currentScore + finalImpact));
+  let newScore = Math.max(0, Math.min(100, currentScore + finalImpact));
 
-  const reason = outcome === 'paid'
+  let reason = outcome === 'paid'
     ? `Week ${repayment.week_number} repayment made on time${isClusterOrigin ? ' (cluster-originated loan, weighted higher)' : ''}.`
     : `Week ${repayment.week_number} repayment missed${isClusterOrigin ? ' (cluster-originated loan, weighted higher)' : ''}.`;
 
-  logTrustScoreChange(loan.shop_id, newScore, reason);
+  // Determine total missed count across this shop's history (all loans)
+  const totalMissed = allRepaymentsForShop.filter(r => r.status === 'missed').length + (outcome === 'missed' ? 1 : 0);
 
+  let newLoanStatus = loan.status;
+
+if (outcome === 'missed') {
+  const remainingPending = db.prepare(`
+    SELECT * FROM repayments WHERE loan_id = ? AND status = 'pending' ORDER BY week_number ASC
+  `).all(loan.id);
+
+  if (remainingPending.length > 0) {
+    // Redistribute the missed amount across remaining weeks
+    const extraPerWeek = Math.round(repayment.amount_due / remainingPending.length);
+    const updateStmt = db.prepare(`UPDATE repayments SET amount_due = amount_due + ? WHERE id = ?`);
+    remainingPending.forEach(r => updateStmt.run(extraPerWeek, r.id));
+
+    if (newConsecutiveMissed >= 2 || totalMissed >= 3) {
+      // Only apply the default penalty ONCE, on first transition into defaulted
+      if (loan.status !== 'defaulted') {
+        const defaultPenalty = Math.round(-20 * multiplier);
+        newScore = Math.max(0, newScore + defaultPenalty);
+        reason += ` Loan marked DEFAULTED (${newConsecutiveMissed} consecutive / ${totalMissed} total missed payments).`;
+      }
+      newLoanStatus = 'defaulted';
+    } else {
+      newLoanStatus = 'overdue';
+    }
+  } else {
+    // This was the last remaining week — nothing left to redistribute onto.
+    // Real NBFC provisioning: recovery deemed unrealistic, formally write off the balance.
+    newLoanStatus = 'loss_asset';
+    const lossPenalty = Math.round(-25 * multiplier);
+    newScore = Math.max(0, newScore + lossPenalty);
+    reason += ` Final unpaid balance of ₹${repayment.amount_due} could not be recovered — loan marked LOSS ASSET (fully provisioned).`;
+
+    db.prepare(`UPDATE loans SET loss_provisioned_amount = loss_provisioned_amount + ? WHERE id = ?`)
+      .run(repayment.amount_due, loan.id);
+  }
+} else if (loan.status === 'overdue' || loan.status === 'defaulted') {
+  newLoanStatus = 'active';
+}
+
+db.prepare(`UPDATE loans SET status = @status, consecutive_missed = @consecutive_missed WHERE id = @id`).run({
+  id: loan.id, status: newLoanStatus, consecutive_missed: newConsecutiveMissed
+});
+
+logTrustScoreChange(loan.shop_id, newScore, reason);
+
+  // Check loan completion
   const allRepayments = db.prepare(`SELECT status FROM repayments WHERE loan_id = ?`).all(loan.id);
-  const allPaid = allRepayments.every(r => r.status === 'paid');
-  if (allPaid) {
+  const allResolved = allRepayments.every(r => r.status === 'paid');
+  if (allResolved) {
     updateLoanStatus(loan.id, 'completed');
     const bonusScore = Math.min(100, newScore + 10);
     logTrustScoreChange(loan.shop_id, bonusScore, `Loan fully repaid on schedule — completion bonus applied.`);
@@ -277,6 +354,7 @@ app.post('/api/repayments/:repaymentId/simulate', (req, res) => {
     trust_score_impact: finalImpact,
     previous_score: currentScore,
     new_score: newScore,
+    loan_status: newLoanStatus,
     cluster_weighted: isClusterOrigin
   });
 });
@@ -290,6 +368,23 @@ const { getDashboardStats } = require('./loanHelpers');
 
 app.get('/api/dashboard/stats', (req, res) => {
   res.json(getDashboardStats());
+});
+
+app.get('/api/shops', (req, res) => {
+  res.json(shops);
+});
+
+app.get('/api/shops/:shopId/analyses', (req, res) => {
+  const rows = db.prepare(
+    'SELECT * FROM analyses WHERE shop_id = ? ORDER BY created_at DESC'
+  ).all(req.params.shopId);
+  res.json(rows);
+});
+
+const { getShopStatus } = require('./loanHelpers');
+
+app.get('/api/shops/:shopId/status', (req, res) => {
+  res.json(getShopStatus(req.params.shopId));
 });
 
 app.listen(PORT, () => {

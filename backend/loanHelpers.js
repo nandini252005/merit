@@ -114,6 +114,93 @@ function getTrustScoreHistory(shop_id) {
   return db.prepare(`SELECT * FROM trust_score_history WHERE shop_id = ? ORDER BY created_at ASC`).all(shop_id);
 }
 
+function getDashboardStats() {
+  const totalAnalyses = db.prepare(`SELECT COUNT(*) as count FROM analyses`).get().count;
+  const avgScore = db.prepare(`SELECT AVG(trust_score) as avg FROM analyses`).get().avg;
+  const totalDisbursed = db.prepare(`SELECT SUM(amount) as total FROM loans WHERE status IN ('active', 'completed')`).get().total;
+  const activeLoans = db.prepare(`SELECT COUNT(*) as count FROM loans WHERE status = 'active'`).get().count;
+  const pendingCount = db.prepare(`SELECT COUNT(*) as count FROM loans WHERE status = 'pending'`).get().count;
+  const completedLoans = db.prepare(`SELECT COUNT(*) as count FROM loans WHERE status = 'completed'`).get().count;
+
+  // Shops with at least one missed repayment on an active or completed loan
+  const flaggedShops = db.prepare(`
+    SELECT DISTINCT l.shop_id, l.shop_name
+    FROM loans l
+    JOIN repayments r ON r.loan_id = l.id
+    WHERE r.status = 'missed'
+  `).all();
+
+  return {
+    total_analyses: totalAnalyses,
+    average_trust_score: avgScore ? Math.round(avgScore) : 0,
+    total_disbursed: totalDisbursed || 0,
+    active_loans: activeLoans,
+    pending_applications: pendingCount,
+    completed_loans: completedLoans,
+    flagged_shops: flaggedShops
+  };
+}
+
+function getShopStatus(shop_id) {
+  // Get the most recent loan for this shop (any status)
+  const latestLoan = db.prepare(`
+    SELECT * FROM loans WHERE shop_id = ? ORDER BY applied_at DESC LIMIT 1
+  `).get(shop_id);
+
+  const currentScore = getCurrentTrustScore(shop_id) ?? 0;
+
+  if (!latestLoan) {
+    return { eligibility: 'NO_LOAN', current_loan: null, current_score: currentScore };
+  }
+
+  if (latestLoan.status === 'pending') {
+    return { eligibility: 'PENDING_REVIEW', current_loan: latestLoan, current_score: currentScore };
+  }
+
+  if (latestLoan.status === 'rejected') {
+    return { eligibility: 'NO_LOAN', current_loan: null, current_score: currentScore };
+  }
+
+  if (latestLoan.status === 'active') {
+    return { eligibility: 'ACTIVE', current_loan: latestLoan, current_score: currentScore };
+  }
+
+  if (latestLoan.status === 'overdue') {
+    return { eligibility: 'OVERDUE', current_loan: latestLoan, current_score: currentScore };
+  }
+
+  if (latestLoan.status === 'defaulted') {
+    const eligible = currentScore >= 40;
+    return {
+      eligibility: eligible ? 'COMPLETED_ELIGIBLE' : 'DEFAULTED',
+      current_loan: latestLoan,
+      current_score: currentScore,
+      recovery_needed: eligible ? null : `Trust score must reach 40 (currently ${currentScore})`
+    };
+  }
+  if (latestLoan.status === 'loss_asset') {
+  const eligible = currentScore >= 40;
+  return {
+    eligibility: eligible ? 'COMPLETED_ELIGIBLE' : 'DEFAULTED',
+    current_loan: latestLoan,
+    current_score: currentScore,
+    recovery_needed: eligible ? null : `Trust score must reach 40 (currently ${currentScore})`
+  };
+}
+
+  if (latestLoan.status === 'completed') {
+    return { eligibility: 'COMPLETED_ELIGIBLE', current_loan: latestLoan, current_score: currentScore };
+  }
+
+  return { eligibility: 'NO_LOAN', current_loan: null, current_score: currentScore };
+}
+
+function getNextActionableRepayment(loan_id) {
+  return db.prepare(`
+    SELECT * FROM repayments WHERE loan_id = ? AND status = 'pending' ORDER BY week_number ASC LIMIT 1
+  `).get(loan_id);
+}
+
 module.exports = {
   createLoanApplication,
   getPendingLoans,
@@ -127,5 +214,8 @@ module.exports = {
   getRepaymentById,
   updateRepayment,
   getAnalysisById,
-  getTrustScoreHistory
+  getTrustScoreHistory,
+  getDashboardStats,
+  getShopStatus,
+  getNextActionableRepayment
 };

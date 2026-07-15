@@ -29,6 +29,8 @@ db.exec(`
     shop_name TEXT NOT NULL,
     amount INTEGER,
     tenure_weeks INTEGER,
+    loss_provisioned_amount INTEGER DEFAULT 0,
+    consecutive_missed INTEGER DEFAULT 0,
     interest_tier TEXT,
     distributor_name TEXT,
     status TEXT DEFAULT 'pending',
