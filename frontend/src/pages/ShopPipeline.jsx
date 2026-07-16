@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import TopNav from '../components/layout/TopNav';
 
 /* ═══════════════════════════════════════════════════════════════
    STEP DEFINITIONS — real user-facing copy from the agent diagram
@@ -108,31 +109,6 @@ const STATUS_COPY = {
     canRepay: false,
   },
 };
-
-/* ─── Shared Navbar ─────────────────────────────────────────────── */
-
-function MeritNav({ onLogoClick }) {
-  return (
-    <nav className="plum-surface merit-nav">
-      <div className="merit-logo" onClick={onLogoClick}>
-        <div className="merit-logo-chip">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-              fill="white" fillOpacity="0.95"
-            />
-          </svg>
-        </div>
-        <span className="merit-logo-text">Merit</span>
-      </div>
-      <span className="merit-badge">
-        <span className="merit-badge-dot" />
-        Scripted by Her 2.0 · Meesho Hackathon
-      </span>
-    </nav>
-  );
-}
-
 /* ─── Trust badge pill ──────────────────────────────────────────── */
 
 function TrustBadge({ status }) {
@@ -190,33 +166,43 @@ function ShopPipeline() {
   useEffect(() => { loadContext(); }, [shopId]);
 
   const runAnalysis = async () => {
-    setStatus('running');
-    setResult(null);
-    setError(null);
+  setStatus('running');
+  setResult(null);
+  setError(null);
+  setStepIndex(-1);
 
-    const interval = setInterval(() => {
-      setStepIndex((prev) => (prev < STEPS.length - 1 ? prev + 1 : prev));
-    }, 700);
+  const STEP_DELAY = 1800;
 
-    try {
-      const data = await api.analyzeShop(shopId);
-      await new Promise((r) => setTimeout(r, 700 * STEPS.length));
-      clearInterval(interval);
-      setStepIndex(STEPS.length - 1);
-      setResult(data);
-      setStatus('done');
-    } catch (e) {
-      clearInterval(interval);
-      setError(e.message);
-      setStatus('error');
-    }
-  };
+  const interval = setInterval(() => {
+    setStepIndex((prev) =>
+      prev < STEPS.length - 1 ? prev + 1 : prev
+    );
+  }, STEP_DELAY);
+
+  try {
+    const data = await api.analyzeShop(shopId);
+
+    // Wait until the animation has had enough time to play
+    await new Promise((resolve) =>
+      setTimeout(resolve, STEP_DELAY * STEPS.length)
+    );
+
+    clearInterval(interval);
+    setStepIndex(STEPS.length - 1);
+    setResult(data);
+    setStatus('done');
+  } catch (e) {
+    clearInterval(interval);
+    setError(e.message);
+    setStatus('error');
+  }
+};
 
   /* ── Loading skeleton ── */
   if (!shop || statusLoading) {
     return (
       <div className="merit-page">
-        <MeritNav onLogoClick={() => navigate('/')} />
+       <TopNav/>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
           <div className="skeleton-card" style={{ width: '480px' }}>
             <div className="skeleton-card-header">
@@ -261,7 +247,7 @@ function ShopPipeline() {
     <div className="merit-page">
 
       {/* ══════════ NAVBAR ══════════ */}
-      <MeritNav onLogoClick={() => navigate('/')} />
+      <TopNav />
 
       {/* ══════════ PAGE HEADER ══════════ */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>

@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import TopNav from '../components/layout/TopNav';
 
 /* ─── Reusable card ─────────────────────────────────────────────── */
 
@@ -116,50 +117,7 @@ function Home() {
       }}
     >
       {/* ════════════════════ NAVBAR ════════════════════ */}
-      <nav
-        className="plum-surface"
-        style={{
-          borderBottom: '1px solid rgba(255,255,255,0.06)',
-          padding: '0 52px',
-          height: '66px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          position: 'sticky',
-          top: 0,
-          zIndex: 100,
-          boxShadow: '0 4px 28px rgba(0,0,0,0.22)',
-        }}
-      >
-        {/* Merit logo */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '11px' }}>
-          <div
-            style={{
-              width: '36px', height: '36px',
-              background: 'linear-gradient(135deg, var(--color-meesho-pink) 0%, var(--color-gold) 100%)',
-              borderRadius: '10px',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              boxShadow: '0 3px 12px rgba(244,51,151,0.40)',
-            }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              <path
-                d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-                fill="white" fillOpacity="0.95"
-              />
-            </svg>
-          </div>
-          <span style={{ fontSize: '20px', fontWeight: '800', color: 'white', letterSpacing: '-0.5px' }}>
-            Merit
-          </span>
-        </div>
-
-        {/* Badge — right side */}
-        <span className="merit-badge">
-          <span className="merit-badge-dot" />
-          Scripted by Her 2.0 · Meesho Hackathon
-        </span>
-      </nav>
+    <TopNav />
 
       {/* ════════════════════ HERO ════════════════════ */}
       <section

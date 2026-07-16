@@ -1,30 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
-
-/* ─── Shared navbar ─────────────────────────────────────────────── */
-
-function MeritNav({ onLogoClick }) {
-  return (
-    <nav className="plum-surface merit-nav">
-      <div className="merit-logo" onClick={onLogoClick}>
-        <div className="merit-logo-chip">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-              fill="white" fillOpacity="0.95"
-            />
-          </svg>
-        </div>
-        <span className="merit-logo-text">Merit</span>
-      </div>
-      <span className="merit-badge">
-        <span className="merit-badge-dot" />
-        Scripted by Her 2.0 · Meesho Hackathon
-      </span>
-    </nav>
-  );
-}
+import TopNav from '../components/layout/TopNav';
 
 /* ─── Status badge ───────────────────────────────────────────────── */
 
@@ -159,7 +136,7 @@ function ShopDetailAdmin() {
   if (loading || !shop) {
     return (
       <div className="merit-page">
-        <MeritNav onLogoClick={() => navigate('/')} />
+        <TopNav />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
           <div className="skeleton-card" style={{ width: '520px' }}>
             <div className="skeleton-card-header">
@@ -192,7 +169,7 @@ function ShopDetailAdmin() {
 
   return (
     <div className="merit-page">
-      <MeritNav onLogoClick={() => navigate('/')} />
+      <TopNav />
 
       {/* ══════════ PAGE HEADER ══════════ */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>

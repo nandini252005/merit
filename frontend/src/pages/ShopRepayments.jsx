@@ -1,33 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
+import TopNav from '../components/layout/TopNav';
 
 const GRACE_LIMIT = 4;
-
-/* ─── Shared navbar ─────────────────────────────────────────────── */
-
-function MeritNav({ onLogoClick }) {
-  return (
-    <nav className="plum-surface merit-nav">
-      <div className="merit-logo" onClick={onLogoClick}>
-        <div className="merit-logo-chip">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6L12 2z"
-              fill="white" fillOpacity="0.95"
-            />
-          </svg>
-        </div>
-        <span className="merit-logo-text">Merit</span>
-      </div>
-      <span className="merit-badge">
-        <span className="merit-badge-dot" />
-        Scripted by Her 2.0 · Meesho Hackathon
-      </span>
-    </nav>
-  );
-}
-
 /* ─── Per-row config ─────────────────────────────────────────────── */
 
 const ROW_STATUS = {
@@ -49,6 +25,113 @@ function LoanStatusBadge({ status }) {
   };
   const c = cfg[status] || cfg.active;
   return <span className={c.cls}>{c.label}</span>;
+}
+
+function DecisionPendingRow({ repayment, loanId, onResolved }) {
+  const [preview, setPreview] = useState(null);
+  const [showGraceConfirm, setShowGraceConfirm] = useState(false);
+  const [acting, setActing] = useState(false);
+
+  useEffect(() => {
+    api.gracePreview(loanId).then(setPreview).catch(() => {});
+  }, [loanId]);
+
+  const handlePayFull = async () => {
+    setActing(true);
+    try {
+      await api.simulateRepayment(repayment.id, 'paid');
+      await onResolved();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  const handleConfirmGrace = async () => {
+    setActing(true);
+    try {
+      await api.enterGraceSmoothing(loanId);
+      await onResolved();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setActing(false);
+    }
+  };
+
+  return (
+    <div style={{ padding: '16px 20px', backgroundColor: 'rgba(201,147,26,0.05)', borderLeft: '3px solid var(--color-gold, #C9931A)' }}>
+      <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-plum-ink)', marginBottom: '4px' }}>
+        Final Payment — ₹{repayment.amount_due.toLocaleString('en-IN')}
+      </p>
+      <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', marginBottom: '14px' }}>
+        This final amount is higher than usual. Pay it in full now, or spread it across a grace period.
+      </p>
+
+      {!showGraceConfirm ? (
+        <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+          <button
+            onClick={handlePayFull}
+            disabled={acting}
+            className="apply-btn"
+            style={{ width: 'auto', padding: '10px 18px', opacity: acting ? 0.7 : 1 }}
+          >
+            Pay full ₹{repayment.amount_due.toLocaleString('en-IN')} now
+          </button>
+          <button
+            onClick={() => setShowGraceConfirm(true)}
+            disabled={acting || !preview}
+            style={{
+              padding: '10px 18px', borderRadius: '10px', fontSize: '13px', fontWeight: '700',
+              color: 'var(--color-gold-dark, #8A6A14)', backgroundColor: 'white',
+              border: '1.5px solid var(--color-gold-dark, #8A6A14)', cursor: 'pointer',
+              fontFamily: 'var(--font-sans)', opacity: acting ? 0.7 : 1,
+            }}
+          >
+            Enter grace period instead
+          </button>
+        </div>
+      ) : (
+        <div style={{ backgroundColor: 'white', borderRadius: '10px', padding: '14px', border: '1px solid rgba(201,147,26,0.3)' }}>
+          {preview ? (
+            <>
+              <p style={{ fontSize: '13px', color: 'var(--color-plum-ink)', marginBottom: '10px' }}>
+                This adds <strong>{preview.interest_pct}% interest</strong> and splits the balance across{' '}
+                <strong>{preview.grace_week_count} grace week{preview.grace_week_count !== 1 ? 's' : ''}</strong> at{' '}
+                <strong>₹{preview.per_week_amount.toLocaleString('en-IN')}/week</strong> (total ₹
+                {preview.total_with_interest.toLocaleString('en-IN')}).
+              </p>
+              <div style={{ display: 'flex', gap: '10px' }}>
+                <button
+                  onClick={handleConfirmGrace}
+                  disabled={acting}
+                  className="apply-btn"
+                  style={{ width: 'auto', padding: '9px 16px', opacity: acting ? 0.7 : 1 }}
+                >
+                  {acting ? 'Working...' : 'Confirm — enter grace period'}
+                </button>
+                <button
+                  onClick={() => setShowGraceConfirm(false)}
+                  disabled={acting}
+                  style={{
+                    padding: '9px 16px', borderRadius: '10px', fontSize: '13px', fontWeight: '600',
+                    color: 'var(--color-plum-soft)', backgroundColor: 'transparent',
+                    border: '1px solid var(--color-border, #E8E6EA)', cursor: 'pointer',
+                    fontFamily: 'var(--font-sans)',
+                  }}
+                >
+                  Cancel
+                </button>
+              </div>
+            </>
+          ) : (
+            <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)' }}>Loading terms...</p>
+          )}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /* ─── Main component ─────────────────────────────────────────────── */
@@ -98,7 +181,7 @@ function ShopRepayments() {
   if (loading) {
     return (
       <div className="merit-page">
-        <MeritNav onLogoClick={() => navigate('/')} />
+        <TopNav />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
           <div className="skeleton-card" style={{ width: '520px' }}>
             <div className="skeleton-card-header">
@@ -123,7 +206,7 @@ function ShopRepayments() {
   if (!loan) {
     return (
       <div className="merit-page">
-        <MeritNav onLogoClick={() => navigate('/')} />
+        <TopNav />
         <div className="pipeline-content" style={{ maxWidth: '680px', paddingTop: '40px' }}>
           <div className="error-card">
             <div className="error-icon">
@@ -155,7 +238,8 @@ function ShopRepayments() {
   const nextActionable  = repayments.find((r) => r.status === 'pending');
   const paidWeeks       = repayments.filter((r) => r.status === 'paid').length;
   const missedWeeks     = repayments.filter((r) => r.status === 'missed').length;
-  const remainingBalance = repayments.filter((r) => r.status === 'pending').reduce((s, r) => s + r.amount_due, 0);
+const totalPaid = repayments.filter((r) => r.status === 'paid').reduce((sum, r) => sum + r.amount_due, 0);
+const remainingBalance = loan.amount - totalPaid;
   const totalWeeks      = repayments.length;
   const progressPct     = totalWeeks > 0 ? (paidWeeks / totalWeeks) * 100 : 0;
   const isGrace         = loan.status === 'overdue_final';
@@ -163,7 +247,7 @@ function ShopRepayments() {
 
   return (
     <div className="merit-page">
-      <MeritNav onLogoClick={() => navigate('/')} />
+      <TopNav />
 
       {/* ══════════ PAGE HEADER ══════════ */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>
@@ -250,6 +334,14 @@ function ShopRepayments() {
             )}
           </div>
         )}
+        {/* Sell-through explanation */}
+<div className="result-card" style={{ backgroundColor: 'rgba(31,110,92,0.05)', borderColor: 'rgba(31,110,92,0.15)', marginBottom: '20px' }}>
+  <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', margin: 0, lineHeight: '1.6' }}>
+    Weekly repayment amounts adjust to how much stock this shop actually sold that week — generated
+    by Merit's Sell-Through Agent when the loan was approved, based on this shop's real trust profile.
+    In production, this signal would come directly from Kirana Club's real sales data.
+  </p>
+</div>
 
         {/* Grace period — outstanding balance card */}
         {isGrace && (
@@ -394,9 +486,21 @@ function ShopRepayments() {
 
             {/* Rows */}
             {repayments.map((r, idx) => {
-              const isNext    = nextActionable && r.id === nextActionable.id && !isTerminal;
-              const isLocked  = r.status === 'pending' && !isNext;
-              const rowCfg    = ROW_STATUS[r.status] || ROW_STATUS.pending;
+  if (r.status === 'decision_pending') {
+    return (
+      <DecisionPendingRow
+        key={r.id}
+        repayment={r}
+        loanId={loan.id}
+        isLast={idx === repayments.length - 1}
+        onResolved={load}
+      />
+    );
+  }
+
+  const isNext    = nextActionable && r.id === nextActionable.id && !isTerminal;
+  const isLocked  = r.status === 'pending' && !isNext;
+  const rowCfg    = ROW_STATUS[r.status] || ROW_STATUS.pending;
 
               return (
                 <div
@@ -433,19 +537,23 @@ function ShopRepayments() {
                     </div>
 
                     <div>
-                      <p style={{
-                        fontSize: '14px', fontWeight: '700',
-                        color: isLocked ? 'var(--color-plum-soft)' : 'var(--color-plum-ink)',
-                        margin: 0, lineHeight: '1.2',
-                      }}>
-                        Week {r.week_number}
-                      </p>
-                      {isLocked && (
-                        <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
-                          Locked — resolve earlier weeks first
-                        </p>
-                      )}
-                    </div>
+  <p style={{
+    fontSize: '14px', fontWeight: '700',
+    color: isLocked ? 'var(--color-plum-soft)' : 'var(--color-plum-ink)',
+    margin: 0, lineHeight: '1.2',
+  }}>
+    Week {r.week_number}
+  </p>
+  {isLocked ? (
+    <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
+      Locked — resolve earlier weeks first
+    </p>
+  ) : r.sell_through_pct != null && (
+    <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
+      {r.sell_through_pct}% of stock sold
+    </p>
+  )}
+</div>
                   </div>
 
                   {/* Right: amount + action or badge */}

@@ -90,8 +90,7 @@ function WriteOffNotice({ amount }) {
             <strong style={{ color: 'var(--color-plum-ink)' }}>
               This is not debt forgiveness.
             </strong>{' '}
-            A write-off is an accounting classification — it means MPPL has provisioned for
-            this loss internally, but the debt remains legally owed. Recovery through collections
+            A write-off is an accounting classification. Recovery through collections
             is still possible and the outstanding amount can be pursued at any time.
           </p>
         </div>
