@@ -15,6 +15,8 @@ This prototype demonstrates how Agentic AI can support explainable, fair, and sc
 
 **Deployed link:** https://merit-frontend-red.vercel.app/
 
+**Backend:** https://merit-backend-vw64.onrender.com/
+
 > **A note on load times:** The backend is hosted on Render's free tier, which spins down after inactivity. If you're the first person opening the link in a while, the first request can take **30–60 seconds** to respond while the server wakes up — this is normal, not a bug. Similarly, actions that call the Gemini API (like "Run Merit Analysis") can take a few seconds since they're making live AI calls, not returning cached data.
 >
 > If a page seems stuck or doesn't load right away, please **wait a moment and refresh**.
