@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import TopNav from '../components/layout/TopNav';
+import { fmtCurrency, fmtDate } from '../utils/format';
+import { TrustBadge, TrustBar } from '../components/shared/TrustDisplay';
 
-/* ═══════════════════════════════════════════════════════════════
-   STEP DEFINITIONS — real user-facing copy from the agent diagram
-   ═══════════════════════════════════════════════════════════════ */
+// STEP DEFINITIONS — real user-facing copy from the agent diagram
 
 const STEPS = [
   {
@@ -71,9 +71,7 @@ const STEPS = [
   },
 ];
 
-/* ═══════════════════════════════════════════════════════════════
-   STATUS COPY
-   ═══════════════════════════════════════════════════════════════ */
+// STATUS COPY
 
 const STATUS_COPY = {
   PENDING_REVIEW: {
@@ -109,36 +107,8 @@ const STATUS_COPY = {
     canRepay: false,
   },
 };
-/* ─── Trust badge pill ──────────────────────────────────────────── */
 
-function TrustBadge({ status }) {
-  const cls = {
-    Strong: 'trust-badge trust-badge--strong',
-    Moderate: 'trust-badge trust-badge--moderate',
-    Risky: 'trust-badge trust-badge--risky',
-  };
-  return <span className={cls[status] || cls.Moderate}>{status}</span>;
-}
-
-/* ─── Trust progress bar ────────────────────────────────────────── */
-
-function TrustBar({ score }) {
-  const gradient =
-    score >= 70
-      ? 'linear-gradient(90deg, var(--color-meesho-pink), var(--color-gold))'
-      : score >= 40
-      ? 'linear-gradient(90deg, var(--color-gold), var(--color-marigold))'
-      : 'linear-gradient(90deg, #B23B3B, var(--color-marigold))';
-  return (
-    <div className="trust-bar-track">
-      <div className="trust-bar-fill" style={{ width: `${score}%`, background: gradient }} />
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   MAIN COMPONENT
-   ═══════════════════════════════════════════════════════════════ */
+// MAIN COMPONENT
 
 function ShopPipeline() {
   const { shopId } = useParams();
@@ -166,43 +136,33 @@ function ShopPipeline() {
   useEffect(() => { loadContext(); }, [shopId]);
 
   const runAnalysis = async () => {
-  setStatus('running');
-  setResult(null);
-  setError(null);
-  setStepIndex(-1);
+    setStatus('running');
+    setResult(null);
+    setError(null);
 
-  const STEP_DELAY = 1800;
+    const interval = setInterval(() => {
+      setStepIndex((prev) => (prev < STEPS.length - 1 ? prev + 1 : prev));
+    }, 700);
 
-  const interval = setInterval(() => {
-    setStepIndex((prev) =>
-      prev < STEPS.length - 1 ? prev + 1 : prev
-    );
-  }, STEP_DELAY);
-
-  try {
-    const data = await api.analyzeShop(shopId);
-
-    // Wait until the animation has had enough time to play
-    await new Promise((resolve) =>
-      setTimeout(resolve, STEP_DELAY * STEPS.length)
-    );
-
-    clearInterval(interval);
-    setStepIndex(STEPS.length - 1);
-    setResult(data);
-    setStatus('done');
-  } catch (e) {
-    clearInterval(interval);
-    setError(e.message);
-    setStatus('error');
-  }
-};
+    try {
+      const data = await api.analyzeShop(shopId);
+      await new Promise((r) => setTimeout(r, 700 * STEPS.length));
+      clearInterval(interval);
+      setStepIndex(STEPS.length - 1);
+      setResult(data);
+      setStatus('done');
+    } catch (e) {
+      clearInterval(interval);
+      setError(e.message);
+      setStatus('error');
+    }
+  };
 
   /* ── Loading skeleton ── */
   if (!shop || statusLoading) {
     return (
       <div className="merit-page">
-       <TopNav/>
+        <TopNav />
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '60px' }}>
           <div className="skeleton-card" style={{ width: '480px' }}>
             <div className="skeleton-card-header">
@@ -225,18 +185,6 @@ function ShopPipeline() {
   const canApply       = eligibility === 'NO_LOAN' || eligibility === 'COMPLETED_ELIGIBLE';
   const blockedInfo    = STATUS_COPY[eligibility];
   const showBanner     = shopStatus?.current_loan && blockedInfo && status === 'idle';
-  const referenceMessage =
-  eligibility === 'AT_EXPOSURE_LIMIT'
-    ? 'Your total credit limit across all shops has been reached. Repay existing loans before applying again.'
-    : eligibility === 'PENDING_REVIEW'
-    ? 'You already have a loan application under review. Please wait until it has been processed.'
-    : eligibility === 'ACTIVE'
-    ? 'You already have an active loan for this shop.'
-    : eligibility === 'OVERDUE'
-    ? 'An existing loan repayment is overdue. Clear the overdue amount before applying again.'
-    : eligibility === 'DEFAULTED'
-    ? 'Your previous loan is in default. Improve your repayment history before applying again.'
-    : 'You are currently not eligible for a new loan.';
 
   /* Progress fill % for the stepper track */
   const fillPct = status === 'done'
@@ -246,24 +194,14 @@ function ShopPipeline() {
   return (
     <div className="merit-page">
 
-      {/* ══════════ NAVBAR ══════════ */}
+      {/* NAVBAR */}
       <TopNav />
 
-      {/* ══════════ PAGE HEADER ══════════ */}
+      {/* PAGE HEADER */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>
         {/* Ambient blobs */}
-        <div style={{
-          position: 'absolute', top: '-60px', left: '-60px',
-          width: '300px', height: '300px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(244,51,151,0.14) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', top: '-40px', right: '-40px',
-          width: '240px', height: '240px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(201,147,26,0.12) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="hero-orb hero-orb--pink" />
+        <div className="hero-orb hero-orb--gold" />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto' }}>
           {/* Back button */}
@@ -311,7 +249,7 @@ function ShopPipeline() {
         </div>
       </div>
 
-      {/* ══════════ CONTENT ══════════ */}
+      {/* CONTENT */}
       <div className="pipeline-content">
 
         {/* ── Status banner ── */}
@@ -509,57 +447,35 @@ function ShopPipeline() {
             </div>
 
             {/* Loan Offer */}
-      <div className="result-card">
-  <p className="result-eyebrow" style={{ marginBottom: '12px' }}>
-    Loan Offer
-  </p>
-
-  {canApply ? (
-    <>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '4px' }}>
-        <span className="loan-amount">
-          ₹{result.financing.loan_amount.toLocaleString('en-IN')}
-        </span>
-      </div>
-
-      <p style={{ fontSize: '13px', color: 'var(--color-plum-soft)', margin: '0 0 20px' }}>
-        {result.financing.loan_tenure} · {result.financing.loan_tier} interest
-      </p>
-
-      <button
-        className="apply-btn"
-        onClick={() =>
-          navigate(`/shop-owner/${shopId}/apply`, { state: { result } })
-        }
-      >
-        Apply for this loan →
-      </button>
-    </>
-  ) : (
-    <>
-      <h3
-        style={{
-          margin: '8px 0',
-          fontSize: '22px',
-          color: '#B23B3B',
-        }}
-      >
-        Not eligible for a new loan
-      </h3>
-
-      <p
-        style={{
-          fontSize: '13px',
-          color: 'var(--color-plum-soft)',
-          lineHeight: '1.6',
-          margin: 0,
-        }}
-      >
-        {referenceMessage}
-      </p>
-    </>
-  )}
-</div>
+            <div className="result-card">
+              <p className="result-eyebrow" style={{ marginBottom: '12px' }}>Loan Offer</p>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '4px' }}>
+                <span className="loan-amount">
+                  {fmtCurrency(result.financing.loan_amount)}
+                </span>
+              </div>
+              <p style={{ fontSize: '13px', color: 'var(--color-plum-soft)', margin: '0 0 10px' }}>
+                {result.financing.loan_tenure}&nbsp;·&nbsp;{result.financing.loan_tier} interest
+              </p>
+              <p style={{ fontSize: '12px', color: 'var(--color-plum-mid)', margin: '0 0 20px', lineHeight: '1.5' }}>
+                Need less? You can customise this amount during the application process.
+              </p>
+              {canApply ? (
+                <button
+                  className="apply-btn"
+                  onClick={() => navigate(`/shop-owner/${shopId}/apply`, { state: { result } })}
+                >
+                  Apply for this loan →
+                </button>
+              ) : (
+                <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', margin: 0, lineHeight: '1.6' }}>
+                  For reference only — you already have{' '}
+                  {eligibility === 'PENDING_REVIEW'
+                    ? 'an application under review'
+                    : 'an active or unresolved loan'}.
+                </p>
+              )}
+            </div>
 
             {/* Cluster — full width, conditional */}
             {result.cluster?.cluster_used && (

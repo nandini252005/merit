@@ -2,36 +2,41 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import TopNav from '../components/layout/TopNav';
+import { fmtCurrency, fmtDate } from '../utils/format';
+import { STATUS_MAP, LoanStatusBadge } from '../components/shared/LoanStatusBadge';
+import { ActionButtons } from '../components/shared/ActionButtons';
 
-/* ─── Status configs (shared across pending + all-loans) ─────────── */
+// Pending application card
 
-const STATUS_MAP = {
-  pending:    { badgeCls: 'shop-badge shop-badge--pending',   label: 'Pending',     dot: 'var(--color-gold)',  dotBg: 'var(--color-gold-bg)' },
-  active:     { badgeCls: 'shop-badge shop-badge--active',    label: 'Active',      dot: 'var(--color-plum)', dotBg: 'rgba(61,42,74,0.10)' },
-  overdue:    { badgeCls: 'shop-badge shop-badge--overdue',   label: 'Overdue',     dot: 'var(--color-gold)', dotBg: 'var(--color-gold-bg)' },
-  defaulted:  { badgeCls: 'shop-badge shop-badge--defaulted', label: 'Defaulted',   dot: '#B23B3B',           dotBg: 'rgba(178,59,59,0.09)' },
-  loss_asset: { badgeCls: 'shop-badge shop-badge--defaulted', label: 'Written Off', dot: '#B23B3B',           dotBg: 'rgba(178,59,59,0.09)' },
-  completed:  { badgeCls: 'trust-badge trust-badge--strong',  label: 'Completed',   dot: '#1F6E5C',           dotBg: '#DCEFE8' },
-  rejected:   { badgeCls: 'shop-badge shop-badge--defaulted', label: 'Rejected',    dot: '#B23B3B',           dotBg: 'rgba(178,59,59,0.09)' },
-};
-
-function LoanStatusBadge({ status }) {
-  const c = STATUS_MAP[status] || STATUS_MAP.pending;
-  return <span className={c.badgeCls}>{c.label}</span>;
-}
-
-/* ─── Pending application card ───────────────────────────────────── */
+// Pending application card
 
 function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
   const [expanded, setExpanded] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
   const isActing = actingOn === loan.id;
 
+  const runAnalysis = async () => {
+    setAnalyzing(true);
+    setExpanded(true);
+    try {
+      const res = await fetch(`http://localhost:5000/api/loans/${loan.id}/credit-analysis`, { method: 'POST' });
+      if (!res.ok) throw new Error("Request failed");
+      const data = await res.json();
+      setAnalysis(data);
+    } catch (e) {
+      alert("Analysis failed: " + e.message);
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
   const detailItems = [
-    { label: 'Loan Amount', value: `₹${loan.amount.toLocaleString('en-IN')}`, color: 'var(--color-meesho-pink)', weight: '800' },
+    { label: 'Loan Amount', value: fmtCurrency(loan.amount), color: 'var(--color-meesho-pink)', weight: '800' },
     { label: 'Tenure',      value: `${loan.tenure_weeks} weeks`,              color: 'var(--color-plum-ink)',    weight: '700' },
     { label: 'Interest Tier', value: loan.interest_tier,                      color: 'var(--color-plum-ink)',    weight: '700' },
     { label: 'Distributor', value: loan.distributor_name,                     color: 'var(--color-plum-ink)',    weight: '700' },
-    { label: 'Applied',     value: new Date(loan.applied_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }), color: 'var(--color-plum-soft)', weight: '600' },
+    { label: 'Applied',     value: fmtDate(loan.applied_at), color: 'var(--color-plum-soft)', weight: '600' },
     ...(loan.shop_id ? [{ label: 'Shop ID', value: loan.shop_id, color: 'var(--color-plum-soft)', weight: '600' }] : []),
   ];
 
@@ -67,7 +72,7 @@ function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
             )}
           </div>
           <p className="result-body" style={{ margin: 0 }}>
-            <strong style={{ color: 'var(--color-meesho-pink)' }}>₹{loan.amount.toLocaleString('en-IN')}</strong>
+            <strong style={{ color: 'var(--color-meesho-pink)' }}>{fmtCurrency(loan.amount)}</strong>
             &nbsp;·&nbsp;{loan.tenure_weeks} weeks
             &nbsp;·&nbsp;{loan.interest_tier} interest
             &nbsp;·&nbsp;to <strong style={{ color: 'var(--color-plum-ink)' }}>{loan.distributor_name}</strong>
@@ -76,6 +81,31 @@ function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
 
         {/* Action buttons */}
         <div style={{ display: 'flex', gap: '8px', flexShrink: 0, alignItems: 'center', flexWrap: 'wrap' }}>
+
+          <button
+            onClick={runAnalysis}
+            disabled={analyzing || isActing}
+            style={{
+              padding: '8px 14px', borderRadius: '9px',
+              fontSize: '13px', fontWeight: '800',
+              color: 'var(--color-gold-dark)',
+              backgroundColor: 'var(--color-gold-bg)',
+              border: '1px solid rgba(184,121,31,0.22)',
+              cursor: analyzing ? 'not-allowed' : 'pointer', fontFamily: 'var(--font-sans)',
+              display: 'flex', alignItems: 'center', gap: '6px',
+              transition: 'all 0.2s',
+              opacity: (analyzing || isActing) ? 0.6 : 1
+            }}
+          >
+            {analyzing ? (
+              <span className="spinner" style={{ width: '12px', height: '12px', borderTopColor: 'var(--color-gold-dark)', borderRightColor: 'var(--color-gold-dark)' }} />
+            ) : (
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            )}
+            {analyzing ? 'Analyzing...' : 'Run Merit Analysis'}
+          </button>
 
           {/* View / Hide toggle */}
           <button
@@ -99,40 +129,7 @@ function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
             </svg>
           </button>
 
-          {/* Reject */}
-          <button
-            disabled={isActing}
-            onClick={() => onDecision(loan.id, 'reject')}
-            style={{
-              padding: '8px 18px', borderRadius: '9px',
-              fontSize: '13px', fontWeight: '700',
-              color: '#B23B3B', backgroundColor: 'rgba(178,59,59,0.09)',
-              border: '1px solid rgba(178,59,59,0.22)',
-              cursor: isActing ? 'not-allowed' : 'pointer',
-              fontFamily: 'var(--font-sans)',
-              opacity: isActing ? 0.55 : 1, transition: 'all 0.2s',
-            }}
-          >
-            Reject
-          </button>
-
-          {/* Approve */}
-          <button
-            disabled={isActing}
-            onClick={() => onDecision(loan.id, 'approve')}
-            style={{
-              padding: '8px 18px', borderRadius: '9px',
-              fontSize: '13px', fontWeight: '700',
-              color: 'white', backgroundColor: '#1F6E5C',
-              border: 'none',
-              cursor: isActing ? 'not-allowed' : 'pointer',
-              fontFamily: 'var(--font-sans)',
-              boxShadow: '0 3px 10px rgba(31,110,92,0.28)',
-              opacity: isActing ? 0.55 : 1, transition: 'all 0.2s',
-            }}
-          >
-            {isActing ? 'Working…' : '✓ Approve'}
-          </button>
+          <ActionButtons loan={loan} actingOn={actingOn} onDecision={onDecision} />
         </div>
       </div>
 
@@ -142,6 +139,58 @@ function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
           marginTop: '16px', paddingTop: '16px',
           borderTop: '1px solid rgba(61,42,74,0.08)',
         }}>
+          
+          {analyzing && (
+             <div style={{ padding: '20px', textAlign: 'center', backgroundColor: 'rgba(61,42,74,0.03)', borderRadius: '12px', marginBottom: '16px' }}>
+                <div className="spinner" style={{ width: '20px', height: '20px', marginBottom: '12px', borderTopColor: 'var(--color-gold-dark)', borderRightColor: 'var(--color-gold-dark)' }} />
+                <p style={{ margin: 0, fontSize: '13px', color: 'var(--color-plum-mid)', fontWeight: '600' }}>Evaluating owner's portfolio across all shops...</p>
+             </div>
+          )}
+          
+          {analysis && !analyzing && (
+            <div style={{ 
+              marginBottom: '20px', 
+              padding: '16px', 
+              borderRadius: '12px', 
+              backgroundColor: analysis.recommendation === 'Approve' ? '#DCEFE8' : 'rgba(178,59,59,0.09)',
+              border: analysis.recommendation === 'Approve' ? '1px solid #1F6E5C' : '1px solid #B23B3B'
+            }}>
+               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '10px' }}>
+                 <div>
+                   <span style={{ fontSize: '11px', fontWeight: '800', textTransform: 'uppercase', color: analysis.recommendation === 'Approve' ? '#1F6E5C' : '#B23B3B', letterSpacing: '0.5px' }}>
+                     AI Recommendation
+                   </span>
+                   <h4 style={{ margin: '4px 0 0', fontSize: '18px', fontWeight: '800', color: analysis.recommendation === 'Approve' ? '#114035' : '#732525' }}>
+                     {analysis.recommendation} Loan
+                   </h4>
+                 </div>
+                 <div style={{ textAlign: 'right' }}>
+                   <span style={{ fontSize: '10px', color: 'var(--color-plum-soft)', textTransform: 'uppercase', fontWeight: '700' }}>Confidence</span>
+                   <p style={{ margin: '2px 0 0', fontSize: '13px', fontWeight: '800', color: 'var(--color-plum-ink)' }}>{analysis.confidence}</p>
+                 </div>
+               </div>
+               
+               <p style={{ fontSize: '13px', lineHeight: '1.5', color: 'var(--color-plum-ink)', margin: '0 0 16px' }}>
+                 {analysis.reasoning}
+               </p>
+               
+               <div style={{ display: 'flex', gap: '12px', paddingTop: '12px', borderTop: `1px solid ${analysis.recommendation === 'Approve' ? 'rgba(31,110,92,0.2)' : 'rgba(178,59,59,0.2)'}` }}>
+                 <div style={{ flex: 1 }}>
+                   <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: '700', color: 'var(--color-plum-soft)', textTransform: 'uppercase' }}>Owner Portfolio</p>
+                   <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--color-plum-ink)' }}>{analysis.owner_context.shop_ids.length} Shops Owned</p>
+                 </div>
+                 <div style={{ flex: 1 }}>
+                   <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: '700', color: 'var(--color-plum-soft)', textTransform: 'uppercase' }}>Blended Score</p>
+                   <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: 'var(--color-plum-ink)' }}>{analysis.owner_context.blended_score}/100</p>
+                 </div>
+                 <div style={{ flex: 1 }}>
+                   <p style={{ margin: '0 0 4px', fontSize: '10px', fontWeight: '700', color: 'var(--color-plum-soft)', textTransform: 'uppercase' }}>Total Missed</p>
+                   <p style={{ margin: 0, fontSize: '13px', fontWeight: '800', color: analysis.owner_context.total_missed_payments > 0 ? '#B23B3B' : '#1F6E5C' }}>{analysis.owner_context.total_missed_payments} Payments</p>
+                 </div>
+               </div>
+            </div>
+          )}
+
           <p style={{
             fontSize: '10px', fontWeight: '800', textTransform: 'uppercase',
             letterSpacing: '0.6px', color: 'var(--color-plum-soft)', margin: '0 0 14px',
@@ -173,7 +222,7 @@ function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
   );
 }
 
-/* ─── Main dashboard ─────────────────────────────────────────────── */
+// Main dashboard
 
 function DashboardView() {
   const [stats,   setStats]   = useState(null);
@@ -242,20 +291,10 @@ function DashboardView() {
     <div className="merit-page">
       <TopNav />
 
-      {/* ══════════ PAGE HEADER ══════════ */}
+      {/* PAGE HEADER */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>
-        <div style={{
-          position: 'absolute', top: '-60px', left: '-60px',
-          width: '300px', height: '300px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(244,51,151,0.13) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', top: '-40px', right: '-40px',
-          width: '240px', height: '240px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(201,147,26,0.14) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="hero-orb hero-orb--pink" />
+        <div className="hero-orb hero-orb--gold" />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: '1100px', margin: '0 auto' }}>
           {/* Gold-tinted label pill for credit officer context */}
@@ -298,7 +337,7 @@ function DashboardView() {
         </div>
       </div>
 
-      {/* ══════════ CONTENT ══════════ */}
+      {/* CONTENT */}
       <div className="pipeline-content" style={{ maxWidth: '1140px' }}>
 
         {/* ── Stats row ── */}
@@ -313,7 +352,7 @@ function DashboardView() {
           </div>
           <div className="stat-chip">
             <span className="stat-chip-value" style={{ color: 'var(--color-meesho-pink)' }}>
-              ₹{stats.total_disbursed.toLocaleString('en-IN')}
+              {fmtCurrency(stats.total_disbursed)}
             </span>
             <span className="stat-chip-label">Total disbursed</span>
           </div>
@@ -468,7 +507,7 @@ function DashboardView() {
                     </div>
 
                     <span style={{ flex: '1 1 100px', fontSize: '13px', fontWeight: '700', color: 'var(--color-plum-ink)' }}>
-                      ₹{loan.amount.toLocaleString('en-IN')}
+                      {fmtCurrency(loan.amount)}
                     </span>
                     <span style={{ flex: '1 1 80px', fontSize: '13px', color: 'var(--color-plum-mid)' }}>
                       {loan.tenure_weeks}w
@@ -480,9 +519,7 @@ function DashboardView() {
                       <LoanStatusBadge status={loan.status} />
                     </span>
                     <span style={{ flex: '1 1 100px', fontSize: '12px', color: 'var(--color-plum-soft)' }}>
-                      {new Date(loan.applied_at).toLocaleDateString('en-IN', {
-                        day: 'numeric', month: 'short', year: 'numeric',
-                      })}
+                      {fmtDate(loan.applied_at)}
                     </span>
 
                     {/* Arrow */}

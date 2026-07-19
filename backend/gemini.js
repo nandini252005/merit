@@ -3,7 +3,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Try these in order if one is overloaded
 const MODEL_FALLBACKS = ['gemini-flash-latest', 'gemini-3.1-flash-lite', 'gemini-2.5-flash'];
 
 function sleep(ms) {

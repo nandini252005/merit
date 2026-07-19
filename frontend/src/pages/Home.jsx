@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import TopNav from '../components/layout/TopNav';
 
-/* ─── Reusable card ─────────────────────────────────────────────── */
+// Reusable card
 
 function ViewCard({ title, subtitle, ctaText, ctaColor, accentGradient, iconBg, icon, onClick }) {
   const [hov, setHov] = useState(false);
@@ -102,7 +102,7 @@ function ViewCard({ title, subtitle, ctaText, ctaColor, accentGradient, iconBg, 
   );
 }
 
-/* ─── Main Page ─────────────────────────────────────────────────── */
+// Main Page
 
 function Home() {
   const navigate = useNavigate();
@@ -116,10 +116,10 @@ function Home() {
         flexDirection: 'column',
       }}
     >
-      {/* ════════════════════ NAVBAR ════════════════════ */}
-    <TopNav />
+      {/* NAVBAR */}
+      <TopNav />
 
-      {/* ════════════════════ HERO ════════════════════ */}
+      {/* HERO */}
       <section
         className="hero-bg"
         style={{
@@ -131,18 +131,8 @@ function Home() {
         }}
       >
         {/* Glow blobs */}
-        <div style={{
-          position: 'absolute', top: '-80px', left: '-80px',
-          width: '500px', height: '500px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(244,51,151,0.13) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', top: '-60px', right: '-60px',
-          width: '420px', height: '420px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(201,147,26,0.13) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="hero-orb hero-orb--pink" />
+        <div className="hero-orb hero-orb--gold" />
         <div style={{
           position: 'absolute', bottom: '-60px', left: '35%',
           width: '380px', height: '380px', borderRadius: '50%',
@@ -163,10 +153,9 @@ function Home() {
             position: 'relative', zIndex: 1,
           }}
         >
-          You've been building trust
-every single week.{' '} <br></br>
+          You've been building trust. <br />
           <span className="text-gradient-pink-gold">
-           Merit sees it.
+           Merit noticed.
           </span>
         </h1>
 
@@ -181,7 +170,7 @@ every single week.{' '} <br></br>
             position: 'relative', zIndex: 1,
           }}
         >
-          Every Kirana Club order builds your trust. Merit turns that trust into the credit you deserve.
+          Every transaction tells a story. MERIT turns those everyday business signals into intelligent credit decisions that work for Bharat's retailers.
         </p>
 
         {/* Cards */}
@@ -214,8 +203,8 @@ every single week.{' '} <br></br>
           />
 
           <ViewCard
-            title="View Credit Dashboard"
-            subtitle="Review applications, approve or reject loans, and monitor the full lending portfolio in one place."
+            title="View as Credit Officer"
+            subtitle="Assess merchant eligibility, approve financing, and monitor loan performance across the lending portfolio."
             ctaText="Open Dashboard"
             ctaColor="var(--color-gold-dark)"
             accentGradient="linear-gradient(90deg, var(--color-gold) 0%, var(--color-gold-light) 100%)"
@@ -250,10 +239,10 @@ every single week.{' '} <br></br>
               color: 'var(--color-plum)',
               margin: '0 0 6px', letterSpacing: '-0.9px',
             }}>
-              4.1M
+              4.1M+
             </p>
-            <p style={{ fontSize: '13px', color: 'var(--color-plum-soft)', margin: 0 }}>
-              Kirana Club shops with no lending access
+            <p style={{ fontSize: '14px', color: 'var(--color-plum-soft)', margin: 0 }}>
+              Registered Kirana retailers ready for AI-powered credit
             </p>
           </div>
 
@@ -268,16 +257,16 @@ every single week.{' '} <br></br>
               color: 'var(--color-gold-dark)',
               margin: '0 0 6px', letterSpacing: '-0.9px',
             }}>
-              ₹24.72Cr
+              ₹100Cr
             </p>
-            <p style={{ fontSize: '13px', color: 'var(--color-plum-soft)', margin: 0 }}>
-              MPPL's FY26 loss — needs a bigger borrower pool
+            <p style={{ fontSize: '14px', color: 'var(--color-plum-soft)', margin: 0 }}>
+              New capital fueling MPPL's next phase of lending growth
             </p>
           </div>
         </div>
       </section>
 
-      {/* ════════════════════ FOOTER ════════════════════ */}
+      {/* FOOTER */}
       <footer
         className="plum-surface"
         style={{
@@ -292,7 +281,7 @@ every single week.{' '} <br></br>
           margin: 0,
           letterSpacing: '0.25px',
         }}>
-          Runs on simulated Kirana Club data · Built for Scripted by Her 2.0
+           Runs on simulated Kirana Club data · Powered by Agentic AI · Built for Bharat · Scripted By{"{"}Her{"}"} 2.0
         </p>
       </footer>
     </div>

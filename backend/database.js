@@ -33,6 +33,9 @@ db.exec(`
     consecutive_missed INTEGER DEFAULT 0,
     interest_tier TEXT,
     distributor_name TEXT,
+    grace_weeks_elapsed INTEGER DEFAULT 0,
+    grace_smoothing_interest_pct REAL DEFAULT 0,
+    outstanding_balance INTEGER DEFAULT 0,
     status TEXT DEFAULT 'pending',
     applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     approved_at DATETIME,
@@ -48,6 +51,8 @@ db.exec(`
     week_number INTEGER,
     amount_due INTEGER,
     status TEXT DEFAULT 'pending',
+    sell_through_pct INTEGER,
+    is_grace_week INTEGER DEFAULT 0,
     trust_score_impact INTEGER,
     paid_at DATETIME,
     FOREIGN KEY (loan_id) REFERENCES loans(id)

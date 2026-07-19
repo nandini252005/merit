@@ -2,7 +2,11 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { api } from '../api/client';
 import TopNav from '../components/layout/TopNav';
-/* ─── Main component ────────────────────────────────────────────── */
+import { fmtCurrency, fmtDate } from '../utils/format';
+
+// Main component
+
+// Main component
 
 function LoanApply() {
   const { shopId }   = useParams();
@@ -13,9 +17,18 @@ function LoanApply() {
   const [loadingResult, setLoadingResult] = useState(!location.state?.result);
   const [distributorName, setDistributorName] = useState('');
   const [inputFocused,  setInputFocused]  = useState(false);
+  const [amountFocused, setAmountFocused] = useState(false);
   const [submitting,    setSubmitting]    = useState(false);
   const [submitted,     setSubmitted]     = useState(false);
   const [error,         setError]         = useState(null);
+  const [customAmount,  setCustomAmount]  = useState(0);
+
+  const calculateAPR = (score) => {
+    if (score <= 25) return 24;
+    if (score <= 50) return 20;
+    if (score <= 75) return 15;
+    return 12;
+  };
 
   useEffect(() => {
     if (result) return;
@@ -42,6 +55,7 @@ function LoanApply() {
           },
           coaching: { coaching_message: latest.coaching_message },
         });
+        setCustomAmount(latest.loan_amount);
       }
       setLoadingResult(false);
     });
@@ -54,16 +68,31 @@ function LoanApply() {
       setError('Please enter a distributor name for this restock order.');
       return;
     }
+    
+    const amountVal = Number(customAmount);
+    
+    if (amountVal < 1000) {
+      setError('The minimum loan amount you can apply for is ₹1,000.');
+      return;
+    }
+    
+    if (amountVal > result.financing.loan_amount) {
+      setError(`Amount cannot exceed your maximum headroom of ${fmtCurrency(result.financing.loan_amount)}.`);
+      return;
+    }
+
     setSubmitting(true);
     setError(null);
+    const finalAmount = amountVal;
+
     try {
       await api.applyForLoan({
         analysis_id:    result.analysis_id,
         shop_id:        result.shop_id,
         shop_name:      result.shop,
-        amount:         result.financing.loan_amount,
+        amount:         finalAmount,
         tenure_weeks:   tenureWeeks,
-        interest_tier:  result.financing.loan_tier,
+        interest_tier:  calculateAPR(result.profile.trust_score),
         distributor_name: distributorName.trim(),
       });
       setSubmitted(true);
@@ -134,7 +163,7 @@ function LoanApply() {
   if (submitted) {
     return (
       <div className="merit-page">
-       <TopNav />
+        <TopNav />
         <div
           className="pipeline-content"
           style={{ maxWidth: '680px', display: 'flex', alignItems: 'center', justifyContent: 'center', paddingTop: '60px' }}
@@ -162,7 +191,7 @@ function LoanApply() {
             <p className="analysis-idle-desc">
               Your{' '}
               <strong style={{ color: 'var(--color-plum-ink)' }}>
-                ₹{result.financing.loan_amount.toLocaleString('en-IN')}
+                {fmtCurrency(customAmount)}
               </strong>{' '}
               application is awaiting MPPL review. You'll be notified once a Credit Officer approves it.
             </p>
@@ -171,7 +200,7 @@ function LoanApply() {
             <div className="stat-chip-row" style={{ justifyContent: 'center', marginBottom: '32px' }}>
               <div className="stat-chip">
                 <span className="stat-chip-value" style={{ fontSize: '16px' }}>
-                  ₹{result.financing.loan_amount.toLocaleString('en-IN')}
+                  {fmtCurrency(customAmount)}
                 </span>
                 <span className="stat-chip-label">Loan amount</span>
               </div>
@@ -203,18 +232,8 @@ function LoanApply() {
       {/* ── Page header ── */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>
         {/* Ambient glow */}
-        <div style={{
-          position: 'absolute', top: '-60px', left: '-60px',
-          width: '300px', height: '300px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(244,51,151,0.14) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', top: '-40px', right: '-40px',
-          width: '240px', height: '240px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(201,147,26,0.12) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="hero-orb hero-orb--pink" />
+        <div className="hero-orb hero-orb--gold" />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: '680px', margin: '0 auto' }}>
           <button className="back-btn" onClick={() => navigate(`/shop-owner/${shopId}`)}>
@@ -249,25 +268,28 @@ function LoanApply() {
       <div className="pipeline-content" style={{ maxWidth: '736px' }}>
 
         {/* Offer summary card */}
-        <div className="result-card" style={{ marginBottom: '16px' }}>
-          <p className="result-eyebrow" style={{ marginBottom: '16px' }}>Offer Summary</p>
-
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', marginBottom: '6px' }}>
-            <span className="loan-amount" style={{ color: 'var(--color-meesho-pink)' }}>
-              ₹{result.financing.loan_amount.toLocaleString('en-IN')}
-            </span>
+        <div className="result-card" style={{ marginBottom: '24px' }}>
+          <div className="result-icon-row" style={{ marginBottom: '16px' }}>
+            <div className="result-icon-chip" style={{ backgroundColor: 'rgba(31, 110, 92, 0.1)' }}>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1F6E5C" strokeWidth="2">
+                <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <p className="result-eyebrow" style={{ color: '#1F6E5C' }}>
+              Approved Loan Offer
+            </p>
           </div>
+          
           <p className="result-body" style={{ marginBottom: '20px' }}>
-            {result.financing.loan_tenure}&nbsp;·&nbsp;{result.financing.loan_tier} interest tier
+            Based on your trust score of <strong>{result.profile.trust_score}/100</strong>, you have been approved for a maximum credit headroom of <strong>{fmtCurrency(result.financing.loan_amount)}</strong>.
           </p>
 
-          {/* 3 summary chips */}
           <div className="stat-chip-row" style={{ marginTop: 0 }}>
             <div className="stat-chip">
               <span className="stat-chip-value">
-                ₹{result.financing.loan_amount.toLocaleString('en-IN')}
+                {fmtCurrency(result.financing.loan_amount)}
               </span>
-              <span className="stat-chip-label">Loan amount</span>
+              <span className="stat-chip-label">Max Headroom</span>
             </div>
             <div className="stat-chip">
               <span className="stat-chip-value" style={{ color: 'var(--color-gold-dark)', fontSize: '16px' }}>
@@ -277,65 +299,84 @@ function LoanApply() {
             </div>
             <div className="stat-chip">
               <span className="stat-chip-value" style={{ color: 'var(--color-plum)', fontSize: '16px' }}>
-                {result.financing.loan_tier}
+                {calculateAPR(result.profile.trust_score)}%
               </span>
-              <span className="stat-chip-label">Interest tier</span>
+              <span className="stat-chip-label">APR</span>
             </div>
           </div>
         </div>
 
-        {/* Distributor form card */}
+        {/* Application Form Card */}
         <div className="result-card">
-          {/* Icon + label */}
-          <div className="result-icon-row">
+          <div className="result-icon-row" style={{ marginBottom: '24px' }}>
             <div className="result-icon-chip" style={{ backgroundColor: 'var(--color-pink-bg)' }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none"
-                stroke="var(--color-meesho-pink)" strokeWidth="2">
-                <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z" strokeLinecap="round" />
-                <path d="M9 22V12h6v10" strokeLinecap="round" />
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-meesho-pink)" strokeWidth="2">
+                <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <p className="result-eyebrow" style={{ color: 'var(--color-plum)' }}>
-              Distributor Details
+              Application Details
             </p>
           </div>
 
-          {/* Question */}
-          <label style={{
-            display: 'block',
-            fontSize: '14px', fontWeight: '700',
-            color: 'var(--color-plum-ink)',
-            margin: '0 0 10px',
+          {/* Custom Amount Input */}
+          <label style={{ display: 'block', fontSize: '15px', fontWeight: '800', color: 'var(--color-plum-ink)', margin: '0 0 12px' }}>
+            How much credit do you need?
+          </label>
+          <div style={{
+            display: 'flex', alignItems: 'center', backgroundColor: '#FAFAFA',
+            borderRadius: '12px', padding: '16px 20px', marginBottom: '8px',
+            border: `2px solid ${amountFocused ? 'var(--color-meesho-pink)' : 'rgba(61,42,74,0.12)'}`,
+            boxShadow: amountFocused ? '0 0 0 4px rgba(244,51,151,0.10)' : 'none',
+            transition: 'border-color 0.2s, box-shadow 0.2s'
           }}>
+            <span style={{ fontSize: '28px', fontWeight: '800', color: 'var(--color-plum-ink)', marginRight: '8px' }}>₹</span>
+            <input
+              type="number"
+              value={customAmount}
+              onChange={(e) => { setCustomAmount(e.target.value); setError(null); }}
+              onFocus={() => setAmountFocused(true)}
+              onBlur={() => {
+                setAmountFocused(false);
+                if (!customAmount) setCustomAmount(1000);
+              }}
+              style={{
+                width: '100%', fontSize: '28px', fontWeight: '800',
+                color: 'var(--color-plum-ink)', backgroundColor: 'transparent',
+                border: 'none', outline: 'none', fontFamily: 'var(--font-sans)',
+                padding: 0, margin: 0,
+              }}
+            />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '32px' }}>
+            <span style={{ fontSize: '13px', color: 'var(--color-plum-soft)' }}>Min: ₹1,000</span>
+            <span style={{ fontSize: '13px', color: 'var(--color-plum-soft)' }}>Max: {fmtCurrency(result.financing.loan_amount)}</span>
+          </div>
+
+          {/* Distributor Input */}
+          <label style={{ display: 'block', fontSize: '15px', fontWeight: '800', color: 'var(--color-plum-ink)', margin: '0 0 12px' }}>
             Which distributor is this restock order for?
           </label>
-
-          {/* Input */}
           <input
             type="text"
             value={distributorName}
             onChange={(e) => { setDistributorName(e.target.value); setError(null); }}
             onFocus={() => setInputFocused(true)}
             onBlur={() => setInputFocused(false)}
-            placeholder="e.g. Sharma FMCG Distributors, Kanpur"
+            placeholder="eg: Test"
             style={{
-              width: '100%',
-              boxSizing: 'border-box',
-              padding: '14px 16px',
+              width: '100%', boxSizing: 'border-box', padding: '16px 20px',
               borderRadius: '12px',
-              border: `1.5px solid ${inputFocused ? 'var(--color-meesho-pink)' : 'rgba(61,42,74,0.20)'}`,
-              boxShadow: inputFocused ? '0 0 0 3px rgba(244,51,151,0.10)' : 'none',
-              backgroundColor: 'white',
-              fontSize: '14px',
-              color: 'var(--color-plum-ink)',
-              fontFamily: 'var(--font-sans)',
-              outline: 'none',
+              border: `2px solid ${inputFocused ? 'var(--color-meesho-pink)' : 'rgba(61,42,74,0.12)'}`,
+              boxShadow: inputFocused ? '0 0 0 4px rgba(244,51,151,0.10)' : 'none',
+              backgroundColor: '#FAFAFA', fontSize: '16px', color: 'var(--color-plum-ink)',
+              fontFamily: 'var(--font-sans)', outline: 'none',
               transition: 'border-color 0.2s, box-shadow 0.2s',
-              marginBottom: '8px',
+              marginBottom: '12px',
             }}
           />
-
-          <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', margin: '0 0 24px', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '13px', color: 'var(--color-plum-soft)', margin: '0 0 32px', lineHeight: '1.6' }}>
             Merit disburses funds directly to this distributor — not to your account.
           </p>
 

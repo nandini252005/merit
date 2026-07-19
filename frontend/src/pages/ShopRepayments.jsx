@@ -2,30 +2,17 @@ import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client';
 import TopNav from '../components/layout/TopNav';
+import { fmtCurrency } from '../utils/format';
+import { LoanStatusBadge } from '../components/shared/LoanStatusBadge';
 
 const GRACE_LIMIT = 4;
-/* ─── Per-row config ─────────────────────────────────────────────── */
 
+// Per-row config
 const ROW_STATUS = {
   paid:    { label: '✓ Paid',    color: '#1F6E5C',                    bg: '#DCEFE8' },
   missed:  { label: '✗ Missed',  color: '#B23B3B',                    bg: 'rgba(178,59,59,0.09)' },
   pending: { label: 'Upcoming',  color: 'var(--color-plum-faint)',    bg: 'rgba(61,42,74,0.06)' },
 };
-
-/* ─── Loan status badge ──────────────────────────────────────────── */
-
-function LoanStatusBadge({ status }) {
-  const cfg = {
-    active:        { cls: 'shop-badge shop-badge--active',   label: 'Active' },
-    overdue:       { cls: 'shop-badge shop-badge--overdue',  label: 'Overdue' },
-    overdue_final: { cls: 'shop-badge shop-badge--overdue',  label: 'Grace Period' },
-    defaulted:     { cls: 'shop-badge shop-badge--defaulted',label: 'Defaulted' },
-    loss_asset:    { cls: 'shop-badge shop-badge--defaulted',label: 'Written Off' },
-    completed:     { cls: 'trust-badge trust-badge--strong', label: 'Completed' },
-  };
-  const c = cfg[status] || cfg.active;
-  return <span className={c.cls}>{c.label}</span>;
-}
 
 function DecisionPendingRow({ repayment, loanId, onResolved }) {
   const [preview, setPreview] = useState(null);
@@ -63,7 +50,7 @@ function DecisionPendingRow({ repayment, loanId, onResolved }) {
   return (
     <div style={{ padding: '16px 20px', backgroundColor: 'rgba(201,147,26,0.05)', borderLeft: '3px solid var(--color-gold, #C9931A)' }}>
       <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--color-plum-ink)', marginBottom: '4px' }}>
-        Final Payment — ₹{repayment.amount_due.toLocaleString('en-IN')}
+        Final Payment — {fmtCurrency(repayment.amount_due)}
       </p>
       <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', marginBottom: '14px' }}>
         This final amount is higher than usual. Pay it in full now, or spread it across a grace period.
@@ -77,7 +64,7 @@ function DecisionPendingRow({ repayment, loanId, onResolved }) {
             className="apply-btn"
             style={{ width: 'auto', padding: '10px 18px', opacity: acting ? 0.7 : 1 }}
           >
-            Pay full ₹{repayment.amount_due.toLocaleString('en-IN')} now
+            Pay full {fmtCurrency(repayment.amount_due)} now
           </button>
           <button
             onClick={() => setShowGraceConfirm(true)}
@@ -99,8 +86,7 @@ function DecisionPendingRow({ repayment, loanId, onResolved }) {
               <p style={{ fontSize: '13px', color: 'var(--color-plum-ink)', marginBottom: '10px' }}>
                 This adds <strong>{preview.interest_pct}% interest</strong> and splits the balance across{' '}
                 <strong>{preview.grace_week_count} grace week{preview.grace_week_count !== 1 ? 's' : ''}</strong> at{' '}
-                <strong>₹{preview.per_week_amount.toLocaleString('en-IN')}/week</strong> (total ₹
-                {preview.total_with_interest.toLocaleString('en-IN')}).
+                <strong>{fmtCurrency(preview.per_week_amount)}/week</strong> (total {fmtCurrency(preview.total_with_interest)}).
               </p>
               <div style={{ display: 'flex', gap: '10px' }}>
                 <button
@@ -134,7 +120,7 @@ function DecisionPendingRow({ repayment, loanId, onResolved }) {
   );
 }
 
-/* ─── Main component ─────────────────────────────────────────────── */
+// Main component
 
 function ShopRepayments() {
   const { shopId } = useParams();
@@ -144,6 +130,7 @@ function ShopRepayments() {
   const [repayments, setRepayments] = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [acting,     setActing]     = useState(false);
+  const [customPay,  setCustomPay]  = useState({});
 
   const load = async () => {
     const status = await api.getShopStatus(shopId);
@@ -156,11 +143,24 @@ function ShopRepayments() {
 
   useEffect(() => { load(); }, [shopId]);
 
-  const handleSimulate = async (repaymentId, outcome) => {
+  const handleSimulate = async (repaymentId, outcome, paidAmount) => {
     setActing(true);
-    try   { await api.simulateRepayment(repaymentId, outcome); await load(); }
-    catch (e) { alert(e.message); }
-    finally   { setActing(false); }
+    try {
+      const res = await fetch(`http://localhost:5000/api/repayments/${repaymentId}/simulate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ outcome, paidAmount })
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || 'Simulation failed');
+      }
+      await load();
+    } catch (e) {
+      alert(e.message);
+    } finally {
+      setActing(false);
+    }
   };
 
   const handleGraceTick = async () => {
@@ -177,7 +177,7 @@ function ShopRepayments() {
     finally   { setActing(false); }
   };
 
-  /* ── Loading ── */
+  // Loading
   if (loading) {
     return (
       <div className="merit-page">
@@ -202,7 +202,7 @@ function ShopRepayments() {
     );
   }
 
-  /* ── No loan ── */
+  // No loan
   if (!loan) {
     return (
       <div className="merit-page">
@@ -234,35 +234,27 @@ function ShopRepayments() {
     );
   }
 
-  /* ── Derived values ── */
+  // Derived values
   const nextActionable  = repayments.find((r) => r.status === 'pending');
   const paidWeeks       = repayments.filter((r) => r.status === 'paid').length;
   const missedWeeks     = repayments.filter((r) => r.status === 'missed').length;
-const totalPaid = repayments.filter((r) => r.status === 'paid').reduce((sum, r) => sum + r.amount_due, 0);
-const remainingBalance = loan.amount - totalPaid;
-  const totalWeeks      = repayments.length;
-  const progressPct     = totalWeeks > 0 ? (paidWeeks / totalWeeks) * 100 : 0;
+  const totalPaid       = repayments.filter((r) => r.status === 'paid').reduce((sum, r) => sum + r.amount_due, 0);
+  const remainingBalance = loan.amount - totalPaid;
+  const totalWeeks      = loan.tenure_weeks || repayments.length;
+  const progressPct     = loan.amount > 0 ? Math.min((totalPaid / loan.amount) * 100, 100) : 0;
   const isGrace         = loan.status === 'overdue_final';
   const isTerminal      = ['completed', 'loss_asset'].includes(loan.status);
+  const totalPendingDue = repayments.filter(r => r.status === 'pending' || r.status === 'decision_pending').reduce((sum, r) => sum + r.amount_due, 0);
+  const maxPayable      = isGrace ? totalPendingDue : remainingBalance;
 
   return (
     <div className="merit-page">
       <TopNav />
 
-      {/* ══════════ PAGE HEADER ══════════ */}
+      {/* PAGE HEADER */}
       <div className="hero-bg page-header" style={{ padding: '36px 56px 32px' }}>
-        <div style={{
-          position: 'absolute', top: '-60px', left: '-60px',
-          width: '300px', height: '300px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(244,51,151,0.14) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
-        <div style={{
-          position: 'absolute', top: '-40px', right: '-40px',
-          width: '240px', height: '240px', borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(201,147,26,0.12) 0%, transparent 65%)',
-          pointerEvents: 'none',
-        }} />
+        <div className="hero-orb hero-orb--pink" />
+        <div className="hero-orb hero-orb--gold" />
 
         <div style={{ position: 'relative', zIndex: 1, maxWidth: '860px', margin: '0 auto' }}>
           <button className="back-btn" onClick={() => navigate(`/shop-owner/${shopId}`)}>
@@ -290,7 +282,7 @@ const remainingBalance = loan.amount - totalPaid;
                 <LoanStatusBadge status={loan.status} />
               </div>
               <p style={{ fontSize: '14px', color: 'var(--color-plum-mid)', margin: 0 }}>
-                ₹{loan.amount.toLocaleString('en-IN')}&nbsp;·&nbsp;to&nbsp;
+                {fmtCurrency(loan.amount)}&nbsp;·&nbsp;to&nbsp;
                 <strong style={{ color: 'var(--color-plum-ink)' }}>{loan.distributor_name}</strong>
               </p>
             </div>
@@ -298,7 +290,7 @@ const remainingBalance = loan.amount - totalPaid;
         </div>
       </div>
 
-      {/* ══════════ CONTENT ══════════ */}
+      {/* CONTENT */}
       <div className="pipeline-content" style={{ maxWidth: '860px' }}>
 
         {/* Summary chips */}
@@ -306,7 +298,7 @@ const remainingBalance = loan.amount - totalPaid;
           <div className="stat-chip-row" style={{ marginBottom: '20px' }}>
             <div className="stat-chip">
               <span className="stat-chip-value" style={{ color: 'var(--color-meesho-pink)' }}>
-                ₹{remainingBalance.toLocaleString('en-IN')}
+                {fmtCurrency(remainingBalance)}
               </span>
               <span className="stat-chip-label">Remaining balance</span>
             </div>
@@ -327,21 +319,50 @@ const remainingBalance = loan.amount - totalPaid;
             {loan.loss_provisioned_amount > 0 && (
               <div className="stat-chip">
                 <span className="stat-chip-value" style={{ color: '#B23B3B', fontSize: '16px' }}>
-                  ₹{loan.loss_provisioned_amount.toLocaleString('en-IN')}
+                  {fmtCurrency(loan.loss_provisioned_amount)}
                 </span>
                 <span className="stat-chip-label">Written off</span>
               </div>
             )}
           </div>
         )}
+        
         {/* Sell-through explanation */}
-<div className="result-card" style={{ backgroundColor: 'rgba(31,110,92,0.05)', borderColor: 'rgba(31,110,92,0.15)', marginBottom: '20px' }}>
-  <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', margin: 0, lineHeight: '1.6' }}>
-    Weekly repayment amounts adjust to how much stock this shop actually sold that week — generated
-    by Merit's Sell-Through Agent when the loan was approved, based on this shop's real trust profile.
-    In production, this signal would come directly from Kirana Club's real sales data.
-  </p>
-</div>
+        <div className="result-card" style={{ backgroundColor: 'rgba(31,110,92,0.05)', borderColor: 'rgba(31,110,92,0.15)', marginBottom: '20px' }}>
+          <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', margin: 0, lineHeight: '1.6' }}>
+            Weekly repayment amounts adjust to how much stock this shop actually sold that week — generated
+            by Merit's Sell-Through Agent when the loan was approved, based on this shop's real trust profile.
+            In production, this signal would come directly from Kirana Club's real sales data.
+          </p>
+        </div>
+
+        {/* Defaulted Notice */}
+        {loan.status === 'defaulted' && (
+          <div
+            className="result-card"
+            style={{
+              backgroundColor: 'rgba(178,59,59,0.06)',
+              borderColor: 'rgba(178,59,59,0.18)',
+              marginBottom: '20px',
+            }}
+          >
+            <div className="result-icon-row">
+              <div className="result-icon-chip" style={{ backgroundColor: 'rgba(178,59,59,0.15)' }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#B23B3B" strokeWidth="2">
+                  <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" strokeLinecap="round" strokeLinejoin="round" />
+                  <line x1="12" y1="9" x2="12" y2="13" strokeLinecap="round" />
+                  <line x1="12" y1="17" x2="12.01" y2="17" strokeLinecap="round" />
+                </svg>
+              </div>
+              <p className="result-eyebrow" style={{ color: '#B23B3B' }}>
+                Loan Defaulted
+              </p>
+            </div>
+            <p className="result-body">
+              This loan has defaulted due to repeated missed payments or failure to settle the final grace period. In a production environment, this triggers a collections process and severely restricts the shop's future credit access.
+            </p>
+          </div>
+        )}
 
         {/* Grace period — outstanding balance card */}
         {isGrace && (
@@ -373,7 +394,7 @@ const remainingBalance = loan.amount - totalPaid;
               {/* Outstanding balance */}
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '6px', marginBottom: '10px' }}>
                 <span style={{ fontSize: '36px', fontWeight: '800', letterSpacing: '-1.2px', color: '#B23B3B', lineHeight: 1 }}>
-                  ₹{loan.outstanding_balance.toLocaleString('en-IN')}
+                  {fmtCurrency(loan.outstanding_balance)}
                 </span>
                 <span style={{ fontSize: '13px', color: 'var(--color-plum-soft)' }}>outstanding</span>
               </div>
@@ -454,7 +475,7 @@ const remainingBalance = loan.amount - totalPaid;
           </>
         )}
 
-        {/* ── Repayment schedule card (compact rows) ── */}
+        {/* Repayment schedule card (compact rows) */}
         {!isGrace && repayments.length > 0 && (
           <div className="result-card" style={{ padding: 0, overflow: 'hidden' }}>
             {/* Card header with progress bar */}
@@ -464,7 +485,7 @@ const remainingBalance = loan.amount - totalPaid;
                   Schedule — {totalWeeks} weeks
                 </p>
                 <p style={{ fontSize: '12px', fontWeight: '700', color: 'var(--color-plum-soft)', margin: 0 }}>
-                  {paidWeeks} paid · {totalWeeks - paidWeeks - missedWeeks} remaining
+                  {paidWeeks}/{totalWeeks} weeks paid
                 </p>
               </div>
               {/* Progress bar */}
@@ -473,7 +494,7 @@ const remainingBalance = loan.amount - totalPaid;
                   className="trust-bar-fill"
                   style={{
                     width: `${progressPct}%`,
-                    background: progressPct === 100
+                    background: progressPct >= 100
                       ? 'linear-gradient(90deg, #1F6E5C, #2E8B6F)'
                       : 'linear-gradient(90deg, var(--color-meesho-pink), var(--color-gold))',
                   }}
@@ -486,21 +507,20 @@ const remainingBalance = loan.amount - totalPaid;
 
             {/* Rows */}
             {repayments.map((r, idx) => {
-  if (r.status === 'decision_pending') {
-    return (
-      <DecisionPendingRow
-        key={r.id}
-        repayment={r}
-        loanId={loan.id}
-        isLast={idx === repayments.length - 1}
-        onResolved={load}
-      />
-    );
-  }
+              if (r.status === 'decision_pending') {
+                return (
+                  <DecisionPendingRow
+                    key={r.id}
+                    repayment={r}
+                    loanId={loan.id}
+                    onResolved={load}
+                  />
+                );
+              }
 
-  const isNext    = nextActionable && r.id === nextActionable.id && !isTerminal;
-  const isLocked  = r.status === 'pending' && !isNext;
-  const rowCfg    = ROW_STATUS[r.status] || ROW_STATUS.pending;
+              const isNext    = nextActionable && r.id === nextActionable.id && !isTerminal;
+              const isLocked  = r.status === 'pending' && !isNext;
+              const rowCfg    = ROW_STATUS[r.status] || ROW_STATUS.pending;
 
               return (
                 <div
@@ -537,23 +557,23 @@ const remainingBalance = loan.amount - totalPaid;
                     </div>
 
                     <div>
-  <p style={{
-    fontSize: '14px', fontWeight: '700',
-    color: isLocked ? 'var(--color-plum-soft)' : 'var(--color-plum-ink)',
-    margin: 0, lineHeight: '1.2',
-  }}>
-    Week {r.week_number}
-  </p>
-  {isLocked ? (
-    <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
-      Locked — resolve earlier weeks first
-    </p>
-  ) : r.sell_through_pct != null && (
-    <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
-      {r.sell_through_pct}% of stock sold
-    </p>
-  )}
-</div>
+                      <p style={{
+                        fontSize: '14px', fontWeight: '700',
+                        color: isLocked ? 'var(--color-plum-soft)' : 'var(--color-plum-ink)',
+                        margin: 0, lineHeight: '1.2',
+                      }}>
+                        Week {r.week_number}
+                      </p>
+                      {isLocked ? (
+                        <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
+                          Locked — resolve earlier weeks first
+                        </p>
+                      ) : r.sell_through_pct != null && (
+                        <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
+                          {r.sell_through_pct}% of stock sold
+                        </p>
+                      )}
+                    </div>
                   </div>
 
                   {/* Right: amount + action or badge */}
@@ -562,44 +582,88 @@ const remainingBalance = loan.amount - totalPaid;
                       fontSize: '14px', fontWeight: '700',
                       color: isLocked ? 'var(--color-plum-soft)' : 'var(--color-plum-ink)',
                     }}>
-                      ₹{r.amount_due.toLocaleString('en-IN')}
+                      {fmtCurrency(r.amount_due)}
                     </span>
 
                     {isNext ? (
-                      <div style={{ display: 'flex', gap: '7px' }}>
-                        {/* Mark Missed */}
-                        <button
-                          onClick={() => handleSimulate(r.id, 'missed')}
-                          disabled={acting}
-                          style={{
-                            padding: '6px 12px', borderRadius: '8px',
-                            fontSize: '12px', fontWeight: '700',
-                            color: '#B23B3B',
-                            backgroundColor: 'rgba(178,59,59,0.09)',
-                            border: '1px solid rgba(178,59,59,0.20)',
-                            cursor: 'pointer', fontFamily: 'var(--font-sans)',
-                            opacity: acting ? 0.6 : 1, transition: 'all 0.2s',
-                          }}
-                        >
-                          ✗ Missed
-                        </button>
-                        {/* Mark Paid */}
-                        <button
-                          onClick={() => handleSimulate(r.id, 'paid')}
-                          disabled={acting}
-                          style={{
-                            padding: '6px 12px', borderRadius: '8px',
-                            fontSize: '12px', fontWeight: '700',
-                            color: 'white', backgroundColor: '#1F6E5C',
-                            border: 'none', cursor: 'pointer',
-                            fontFamily: 'var(--font-sans)',
-                            boxShadow: '0 2px 8px rgba(31,110,92,0.28)',
-                            opacity: acting ? 0.6 : 1, transition: 'all 0.2s',
-                          }}
-                        >
-                          ✓ Paid
-                        </button>
-                      </div>
+                      acting ? (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: 'var(--color-plum-soft)', fontSize: '11px', fontStyle: 'italic', textAlign: 'right', maxWidth: '200px', lineHeight: '1.3' }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite', flexShrink: 0 }}>
+                            <path d="M12 2a10 10 0 0110 10" strokeLinecap="round" />
+                          </svg>
+                          Agent collecting stock sales progress & calculating next payable amount...
+                        </div>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
+                          <div style={{ display: 'flex', gap: '7px', alignItems: 'center' }}>
+                            <span style={{ fontSize: '11px', fontWeight: '600', color: 'var(--color-plum-soft)' }}>Pay: ₹</span>
+                            <input
+                              type="number"
+                              min="1"
+                              value={customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due}
+                              onChange={(e) => setCustomPay({ ...customPay, [r.id]: e.target.value })}
+                              style={{
+                                width: '70px', padding: '5px 8px', borderRadius: '8px',
+                                border: '1px solid rgba(61,42,74,0.15)', textAlign: 'right',
+                                fontSize: '12px', fontWeight: '700', fontFamily: 'var(--font-sans)',
+                                color: 'var(--color-plum-ink)', outline: 'none'
+                              }}
+                            />
+                            {/* Mark Missed */}
+                            <button
+                              onClick={() => handleSimulate(r.id, 'missed')}
+                              disabled={acting}
+                              style={{
+                                padding: '6px 12px', borderRadius: '8px',
+                                fontSize: '12px', fontWeight: '700',
+                                color: '#B23B3B',
+                                backgroundColor: 'rgba(178,59,59,0.09)',
+                                border: '1px solid rgba(178,59,59,0.20)',
+                                cursor: 'pointer', fontFamily: 'var(--font-sans)',
+                                transition: 'all 0.2s',
+                              }}
+                            >
+                              ✗ Miss
+                            </button>
+                            {/* Mark Paid */}
+                            <button
+                              onClick={() => {
+                                const amt = Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due);
+                                handleSimulate(r.id, 'paid', amt);
+                              }}
+                              disabled={
+                                acting || 
+                                Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due) <= 0 ||
+                                Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due) > maxPayable
+                              }
+                              style={{
+                                padding: '6px 12px', borderRadius: '8px',
+                                fontSize: '12px', fontWeight: '700',
+                                color: 'white', backgroundColor: '#1F6E5C',
+                                border: 'none', cursor: 'pointer',
+                                fontFamily: 'var(--font-sans)',
+                                boxShadow: '0 2px 8px rgba(31,110,92,0.28)',
+                                transition: 'all 0.2s',
+                                opacity: (Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due) <= 0 || Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due) > maxPayable) ? 0.5 : 1
+                              }}
+                            >
+                              ✓ Pay
+                            </button>
+                          </div>
+                          
+                          {/* Warnings */}
+                          {Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due) < r.amount_due && (
+                            <span style={{ fontSize: '10px', color: '#B23B3B', maxWidth: '240px', textAlign: 'right', lineHeight: '1.2' }}>
+                              Warning: Paying less than the recommended {fmtCurrency(r.amount_due)} will increase future payments and may make them harder to afford.
+                            </span>
+                          )}
+                          {Number(customPay[r.id] !== undefined ? customPay[r.id] : r.amount_due) > maxPayable && (
+                            <span style={{ fontSize: '10px', color: '#B23B3B', maxWidth: '240px', textAlign: 'right', lineHeight: '1.2' }}>
+                              Cannot pay more than the total remaining balance ({fmtCurrency(maxPayable)}).
+                            </span>
+                          )}
+                        </div>
+                      )
                     ) : (
                       <span style={{
                         fontSize: '11px', fontWeight: '700',
@@ -618,6 +682,9 @@ const remainingBalance = loan.amount - totalPaid;
           </div>
         )}
       </div>
+
+      {/* Spinner keyframe */}
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );
 }

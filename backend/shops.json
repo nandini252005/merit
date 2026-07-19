@@ -1,57 +1,67 @@
 [
   {
     "shop_id": "KC-001",
-    "name": "Ramesh General Store",
+    "name": "A",
     "location": "Kanpur, UP",
     "months_active": 9,
     "weekly_orders": [4, 5, 4, 6, 5, 7, 5, 4, 6],
     "avg_order_value": 2400,
     "categories": ["rice", "oil", "soap", "biscuits"],
     "payment_history": "on_time",
-    "growth_rate": 0.14
+    "growth_rate": 0.14,
+    "owner_id": "OWN-001",
+  "owner_name": "Nandini"
   },
   {
     "shop_id": "KC-002",
-    "name": "Lakshmi Store",
+    "name": "B",
     "location": "Nagpur, MH",
     "months_active": 11,
     "weekly_orders": [6, 7, 6, 8, 7, 8, 9, 8, 9],
     "avg_order_value": 3100,
     "categories": ["rice", "dal", "oil", "sugar", "tea"],
     "payment_history": "on_time",
-    "growth_rate": 0.19
+    "growth_rate": 0.19,
+    "owner_id": "OWN-001",
+  "owner_name": "Nandini"
   },
   {
     "shop_id": "KC-003",
-    "name": "Meena Provisions",
+    "name": "C",
     "location": "Indore, MP",
     "months_active": 5,
     "weekly_orders": [3, 4, 3, 4, 5, 4, 4],
     "avg_order_value": 1800,
     "categories": ["soap", "biscuits", "spices"],
     "payment_history": "mostly_on_time",
-    "growth_rate": 0.08
+    "growth_rate": 0.08,
+    "owner_id": "OWN-001",
+  "owner_name": "Nandini"
   },
   {
     "shop_id": "KC-004",
-    "name": "Raju Quick Mart",
+    "name": "D",
     "location": "Patna, BR",
     "months_active": 4,
     "weekly_orders": [2, 3, 2, 1, 3, 2],
     "avg_order_value": 1200,
     "categories": ["biscuits", "soap"],
     "payment_history": "some_delays",
-    "growth_rate": 0.02
+    "growth_rate": 0.02,
+    "owner_id": "OWN-001",
+  "owner_name": "Nandini"
   },
   {
     "shop_id": "KC-005",
-    "name": "Sunita Kirana",
+    "name": "E",
     "location": "Kanpur, UP",
     "months_active": 0,
     "weekly_orders": [],
     "avg_order_value": 0,
     "categories": ["rice", "oil", "soap"],
     "payment_history": "no_history",
-    "growth_rate": null
+    "growth_rate": null,
+    "owner_id": "OWN-001",
+  "owner_name": "Nandini"
   }
 ]

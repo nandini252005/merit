@@ -29,42 +29,96 @@ function updateLoanStatus(loan_id, status) {
   return stmt.run({ loan_id, status });
 }
 
-function createRepaymentSchedule(loan_id, amount, tenure_weeks, weekly_orders) {
-  const baseWeekly = Math.round(amount / tenure_weeks);
+// Called once at approval — only creates the FIRST week, which is always fixed.
+function createInitialRepayment(loan_id, amount, tenure_weeks) {
+  const week1Amount = Math.round(amount / tenure_weeks);
+  db.prepare(`
+    INSERT INTO repayments (loan_id, week_number, amount_due, sell_through_pct, is_grace_week, status)
+    VALUES (?, 1, ?, NULL, 0, 'pending')
+  `).run(loan_id, week1Amount);
+}
 
-  const relevantOrders = weekly_orders ? weekly_orders.slice(0, tenure_weeks) : [];
-  const avgOrders = relevantOrders.length > 0
-    ? relevantOrders.reduce((a, b) => a + b, 0) / relevantOrders.length
-    : null;
+// Called after each week resolves (paid/missed) — generates the NEXT week live,
+// using a fresh Sell-Through Agent call for just that one week. Ideal baseline 60%, cap ±20%.
+async function generateNextRepaymentWeek(loan, shop, trustScore, runSellThroughAgentFn) {
+  const existingRows = db.prepare(`SELECT * FROM repayments WHERE loan_id = ? ORDER BY week_number ASC`).all(loan.id);
+  
+  // FIX: If we have already entered the grace phase, do not generate any more tenure weeks!
+  const hasGraceWeeks = existingRows.some(r => r.is_grace_week);
+  if (hasGraceWeeks) return null; 
 
-  const amounts = [];
+  const tenureRows = existingRows.filter(r => !r.is_grace_week);
+  const lastWeekNumber = tenureRows.length > 0 ? tenureRows[tenureRows.length - 1].week_number : 0;
+  const nextWeekNumber = lastWeekNumber + 1;
 
-  for (let week = 1; week <= tenure_weeks; week++) {
-    let amountDue = baseWeekly;
+  if (nextWeekNumber > loan.tenure_weeks) return null; // tenure phase already complete
 
-    if (avgOrders && relevantOrders[week - 1] !== undefined) {
-      const thisWeekOrders = relevantOrders[week - 1];
-      const ratio = thisWeekOrders / avgOrders;
-      const adjustment = Math.max(-0.2, Math.min(0.2, ratio - 1));
-      amountDue = Math.round(baseWeekly * (1 + adjustment));
-    }
+  const spentSoFar = tenureRows.filter(r => r.status === 'paid').reduce((sum, r) => sum + r.amount_due, 0);
+  const remainingBalance = loan.amount - spentSoFar;
+  const remainingWeeks = loan.tenure_weeks - lastWeekNumber;
 
-    amounts.push(amountDue);
+  const isFinalWeek = nextWeekNumber === loan.tenure_weeks;
+  
+  if (isFinalWeek) {
+    // Final week: ALWAYS create a decision row instead of a regular pending one
+    const finalAmount = remainingBalance;
+    
+    db.prepare(`
+      INSERT INTO repayments (loan_id, week_number, amount_due, sell_through_pct, is_grace_week, status)
+      VALUES (?, ?, ?, NULL, 0, 'decision_pending')
+    `).run(loan.id, nextWeekNumber, finalAmount);
+    return { type: 'decision_pending', amount: finalAmount };
   }
 
-  // Reconcile: make sure total exactly equals the loan amount
+  // Regular incremental week — get ONE live sell-through % and adjust against a 60% ideal, ±20% cap.
+  const sellThroughResult = await runSellThroughAgentFn(shop, trustScore, 1);
+  const pct = sellThroughResult.weekly_sell_through[0];
+
+  const base = remainingBalance / remainingWeeks;
+  const deviation = (pct - 60) / 100;
+  const adjustment = Math.max(-0.2, Math.min(0.2, deviation));
+  const amountDue = Math.round(base * (1 + adjustment));
+
+  db.prepare(`
+    INSERT INTO repayments (loan_id, week_number, amount_due, sell_through_pct, is_grace_week, status)
+    VALUES (?, ?, ?, ?, 0, 'pending')
+  `).run(loan.id, nextWeekNumber, amountDue, pct);
+
+  return { type: 'regular_week', amount: amountDue, sell_through_pct: pct };
+}
+
+function getGraceWeekCount(trustScore) {
+  if (trustScore >= 76) return 1;
+  if (trustScore >= 51) return 2;
+  if (trustScore >= 26) return 3;
+  return 4;
+}
+
+// Merchant chooses to smooth the disproportionate final payment across grace weeks instead.
+function enterGraceSmoothing(loan_id, trustScore) {
+  const decisionRow = db.prepare(`SELECT * FROM repayments WHERE loan_id = ? AND status = 'decision_pending'`).get(loan_id);
+  if (!decisionRow) return null;
+
+  const graceWeekCount = getGraceWeekCount(trustScore);
+  const interestPct = 0.01; // FLAT 1% interest applied as requested
+  const totalWithInterest = Math.round(decisionRow.amount_due * (1 + interestPct));
+  const evenAmount = Math.round(totalWithInterest / graceWeekCount);
+
+  db.prepare(`DELETE FROM repayments WHERE id = ?`).run(decisionRow.id);
+
+  const amounts = Array(graceWeekCount).fill(evenAmount);
   const currentTotal = amounts.reduce((a, b) => a + b, 0);
-  const difference = amount - currentTotal;
-  amounts[amounts.length - 1] += difference; // adjust final week to true up
+  amounts[amounts.length - 1] += (totalWithInterest - currentTotal); // rounding remainder
 
   const stmt = db.prepare(`
-    INSERT INTO repayments (loan_id, week_number, amount_due, status)
-    VALUES (@loan_id, @week_number, @amount_due, 'pending')
+    INSERT INTO repayments (loan_id, week_number, amount_due, sell_through_pct, is_grace_week, status)
+    VALUES (?, ?, ?, NULL, 1, 'pending')
   `);
+  amounts.forEach((amt, i) => stmt.run(loan_id, decisionRow.week_number + i, amt));
 
-  amounts.forEach((amountDue, index) => {
-    stmt.run({ loan_id, week_number: index + 1, amount_due: amountDue });
-  });
+  db.prepare(`UPDATE loans SET grace_smoothing_interest_pct = ? WHERE id = ?`).run(interestPct * 100, loan_id);
+
+  return { grace_week_count: graceWeekCount, total_with_interest: totalWithInterest, interest_pct: interestPct * 100 };
 }
 
 function getRepaymentsForLoan(loan_id) {
@@ -116,13 +170,19 @@ function getTrustScoreHistory(shop_id) {
 
 function getDashboardStats() {
   const totalAnalyses = db.prepare(`SELECT COUNT(*) as count FROM analyses`).get().count;
-  const avgScore = db.prepare(`SELECT AVG(trust_score) as avg FROM analyses`).get().avg;
-  const totalDisbursed = db.prepare(`SELECT SUM(amount) as total FROM loans WHERE status IN ('active', 'completed')`).get().total;
+
+  // Use CURRENT scores per unique shop, not stale original analysis scores
+  const uniqueShopIds = db.prepare(`SELECT DISTINCT shop_id FROM analyses`).all().map(r => r.shop_id);
+  const currentScores = uniqueShopIds.map(id => getCurrentTrustScore(id) ?? 0);
+  const avgScore = currentScores.length > 0
+    ? Math.round(currentScores.reduce((a, b) => a + b, 0) / currentScores.length)
+    : 0;
+
+  const totalDisbursed = db.prepare(`SELECT SUM(amount) as total FROM loans WHERE status IN ('active', 'completed', 'overdue', 'overdue_final', 'defaulted')`).get().total;
   const activeLoans = db.prepare(`SELECT COUNT(*) as count FROM loans WHERE status = 'active'`).get().count;
   const pendingCount = db.prepare(`SELECT COUNT(*) as count FROM loans WHERE status = 'pending'`).get().count;
   const completedLoans = db.prepare(`SELECT COUNT(*) as count FROM loans WHERE status = 'completed'`).get().count;
 
-  // Shops with at least one missed repayment on an active or completed loan
   const flaggedShops = db.prepare(`
     SELECT DISTINCT l.shop_id, l.shop_name
     FROM loans l
@@ -132,7 +192,7 @@ function getDashboardStats() {
 
   return {
     total_analyses: totalAnalyses,
-    average_trust_score: avgScore ? Math.round(avgScore) : 0,
+    average_trust_score: avgScore,
     total_disbursed: totalDisbursed || 0,
     active_loans: activeLoans,
     pending_applications: pendingCount,
@@ -168,6 +228,9 @@ function getShopStatus(shop_id) {
   if (latestLoan.status === 'overdue') {
     return { eligibility: 'OVERDUE', current_loan: latestLoan, current_score: currentScore };
   }
+  if (latestLoan.status === 'overdue_final') {
+  return { eligibility: 'OVERDUE', current_loan: latestLoan, current_score: currentScore };
+}
 
   if (latestLoan.status === 'defaulted') {
     const eligible = currentScore >= 40;
@@ -197,9 +260,70 @@ function getShopStatus(shop_id) {
 
 function getNextActionableRepayment(loan_id) {
   return db.prepare(`
-    SELECT * FROM repayments WHERE loan_id = ? AND status = 'pending' ORDER BY week_number ASC LIMIT 1
+    SELECT * FROM repayments WHERE loan_id = ? AND status IN ('pending', 'decision_pending') ORDER BY week_number ASC LIMIT 1
   `).get(loan_id);
 }
+
+function applyGracePenalty(loan_id) {
+  const loan = db.prepare('SELECT * FROM loans WHERE id = ?').get(loan_id);
+  const penalty = Math.ceil(loan.outstanding_balance * 0.025); // 2.5% weekly penalty interest
+  db.prepare(`
+    UPDATE loans SET outstanding_balance = outstanding_balance + ?, grace_weeks_elapsed = grace_weeks_elapsed + 1
+    WHERE id = ?
+  `).run(penalty, loan_id);
+  return db.prepare('SELECT * FROM loans WHERE id = ?').get(loan_id);
+}
+
+function settleGraceBalance(loan_id) {
+  db.prepare(`UPDATE loans SET status = 'completed', outstanding_balance = 0 WHERE id = ?`).run(loan_id);
+}
+
+function getOwnerContext(owner_id, allShops) {
+  const ownerShops = allShops.filter(s => s.owner_id === owner_id);
+  const shopIds = ownerShops.map(s => s.shop_id);
+
+  const shopSummaries = shopIds.map(shopId => {
+    const score = getCurrentTrustScore(shopId) ?? 0;
+    const loanCount = db.prepare(`SELECT COUNT(*) as c FROM loans WHERE shop_id = ?`).get(shopId).c;
+    const completedCount = db.prepare(`SELECT COUNT(*) as c FROM loans WHERE shop_id = ? AND status = 'completed'`).get(shopId).c;
+    // Shops with real loan history count more heavily than untested shops
+    const weight = loanCount > 0 ? (1 + completedCount * 0.5) : 0.5;
+    return { shop_id: shopId, score, weight };
+  });
+
+  const totalWeight = shopSummaries.reduce((sum, s) => sum + s.weight, 0);
+  const blendedScore = totalWeight > 0
+    ? Math.round(shopSummaries.reduce((sum, s) => sum + s.score * s.weight, 0) / totalWeight)
+    : 0;
+
+  // Total current exposure across all this owner's shops (active + pending + overdue states)
+  const exposureRow = db.prepare(`
+    SELECT COALESCE(SUM(amount), 0) as total FROM loans
+    WHERE shop_id IN (${shopIds.map(() => '?').join(',')})
+    AND status IN ('pending', 'active', 'overdue', 'overdue_final', 'defaulted')
+  `).get(...shopIds);
+
+  const maxExposure = getOwnerExposureCap(blendedScore);
+
+  return {
+    owner_id,
+    shop_ids: shopIds,
+    blended_score: blendedScore,
+    per_shop: shopSummaries,
+    current_exposure: exposureRow.total,
+    max_exposure: maxExposure,
+    exposure_remaining: Math.max(0, maxExposure - exposureRow.total),
+  };
+}
+
+function getOwnerExposureCap(blendedScore) {
+  if (blendedScore >= 76) return 150000;
+  if (blendedScore >= 51) return 90000;
+  if (blendedScore >= 26) return 40000;
+  return 15000;
+}
+// Lower trust score → more grace weeks (more relief for weaker merchants),
+// higher trust score → fewer, since they're more likely to handle a bigger single catch-up.
 
 module.exports = {
   createLoanApplication,
@@ -207,7 +331,6 @@ module.exports = {
   getLoanById,
   getAllLoans,
   updateLoanStatus,
-  createRepaymentSchedule,
   getRepaymentsForLoan,
   getCurrentTrustScore,
   logTrustScoreChange,
@@ -217,5 +340,13 @@ module.exports = {
   getTrustScoreHistory,
   getDashboardStats,
   getShopStatus,
-  getNextActionableRepayment
+  getNextActionableRepayment,
+  applyGracePenalty,
+  settleGraceBalance,
+  getOwnerContext,
+  getOwnerExposureCap,
+  createInitialRepayment,
+  generateNextRepaymentWeek,
+  getGraceWeekCount,
+  enterGraceSmoothing
 };
