@@ -22,8 +22,8 @@ export const api = {
   approveLoan: (loanId) => request(`/api/loans/${loanId}/approve`, { method: 'POST' }),
   rejectLoan: (loanId) => request(`/api/loans/${loanId}/reject`, { method: 'POST' }),
   getRepayments: (loanId) => request(`/api/loans/${loanId}/repayments`),
-  simulateRepayment: (repaymentId, outcome) =>
-    request(`/api/repayments/${repaymentId}/simulate`, { method: 'POST', body: JSON.stringify({ outcome }) }),
+simulateRepayment: (repaymentId, outcome, paidAmount) =>
+    request(`/api/repayments/${repaymentId}/simulate`, { method: 'POST', body: JSON.stringify({ outcome, paidAmount }) }),
   getTrustHistory: (shopId) => request(`/api/shops/${shopId}/trust-history`),
   getDashboardStats: () => request('/api/dashboard/stats'),
   getShopAnalyses: (shopId) => request(`/api/shops/${shopId}/analyses`),

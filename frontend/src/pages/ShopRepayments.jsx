@@ -143,25 +143,17 @@ function ShopRepayments() {
 
   useEffect(() => { load(); }, [shopId]);
 
-  const handleSimulate = async (repaymentId, outcome, paidAmount) => {
-    setActing(true);
-    try {
-      const res = await fetch(`http://localhost:5000/api/repayments/${repaymentId}/simulate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ outcome, paidAmount })
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error(err.error || 'Simulation failed');
-      }
-      await load();
-    } catch (e) {
-      alert(e.message);
-    } finally {
-      setActing(false);
-    }
-  };
+ const handleSimulate = async (repaymentId, outcome, paidAmount) => {
+  setActing(true);
+  try {
+    await api.simulateRepayment(repaymentId, outcome, paidAmount);
+    await load();
+  } catch (e) {
+    alert(e.message);
+  } finally {
+    setActing(false);
+  }
+};
 
   const handleGraceTick = async () => {
     setActing(true);
