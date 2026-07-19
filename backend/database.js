@@ -1,5 +1,6 @@
 const Database = require('better-sqlite3');
-const db = new Database('merit.db');
+const dbPath = process.env.DB_PATH || 'merit.db';
+const db = new Database(dbPath);
 
 // Table 1: every time the 4-agent pipeline runs on a shop
 db.exec(`
