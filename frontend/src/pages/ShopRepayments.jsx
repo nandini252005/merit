@@ -84,7 +84,7 @@ function DecisionPendingRow({ repayment, loanId, onResolved }) {
           {preview ? (
             <>
               <p style={{ fontSize: '13px', color: 'var(--color-plum-ink)', marginBottom: '10px' }}>
-                This adds <strong>{preview.interest_pct}% interest</strong> and splits the balance across{' '}
+                This adds <strong>{0}% interest for this demo</strong> and splits the balance across{' '}
                 <strong>{preview.grace_week_count} grace week{preview.grace_week_count !== 1 ? 's' : ''}</strong> at{' '}
                 <strong>{fmtCurrency(preview.per_week_amount)}/week</strong> (total {fmtCurrency(preview.total_with_interest)}).
               </p>
@@ -330,9 +330,7 @@ function ShopRepayments() {
         {/* Sell-through explanation */}
         <div className="result-card" style={{ backgroundColor: 'rgba(31,110,92,0.05)', borderColor: 'rgba(31,110,92,0.15)', marginBottom: '20px' }}>
           <p style={{ fontSize: '12px', color: 'var(--color-plum-soft)', margin: 0, lineHeight: '1.6' }}>
-            Weekly repayment amounts adjust to how much stock this shop actually sold that week — generated
-            by Merit's Sell-Through Agent when the loan was approved, based on this shop's real trust profile.
-            In production, this signal would come directly from Kirana Club's real sales data.
+Weekly repayment amounts are calibrated using the merchant's reorder frequency rather than profit or loss. MERIT's Sell-Through Agent estimates repayment capacity based on how consistently the shop replenishes inventory. In production, this signal would be derived from Kirana Club's real reorder data.
           </p>
         </div>
 
@@ -382,7 +380,7 @@ function ShopRepayments() {
 
               <p className="result-body" style={{ marginBottom: '16px' }}>
                 Your last scheduled payment was missed. The outstanding balance now accrues{' '}
-                <strong style={{ color: 'var(--color-gold-dark)' }}>2.5% penalty interest</strong>{' '}
+                <strong style={{ color: 'var(--color-gold-dark)' }}>0% penalty interest(for this demo)</strong>{' '}
                 each week until it's settled. You have{' '}
                 <strong style={{ color: 'var(--color-gold-dark)' }}>
                   {GRACE_LIMIT - loan.grace_weeks_elapsed} week
@@ -570,7 +568,7 @@ function ShopRepayments() {
                         </p>
                       ) : r.sell_through_pct != null && (
                         <p style={{ fontSize: '11px', color: 'var(--color-plum-faint)', margin: 0 }}>
-                          {r.sell_through_pct}% of stock sold
+                          {r.sell_through_pct}% of stock sold (will be calibrated through re-order frequency in production)
                         </p>
                       )}
                     </div>

@@ -274,10 +274,26 @@ app.post('/api/loans/:loanId/enter-grace-smoothing', (req, res) => {
 
 app.get('/api/loans/:loanId/grace-preview', (req, res) => {
   const loan = getLoanById(req.params.loanId);
-  const decisionRow = db.prepare(`SELECT * FROM repayments WHERE loan_id = ? AND status = 'decision_pending'`).get(loan.id);
-  if (!decisionRow) return res.status(409).json({ error: 'No pending decision.' });
-  const graceWeekCount = getGraceWeekCount(getCurrentTrustScore(loan.shop_id) ?? 50);
-  res.json({ outstanding_amount: decisionRow.amount_due, grace_week_count: graceWeekCount, interest_pct: 1, total_with_interest: Math.round(decisionRow.amount_due * 1.01), per_week_amount: Math.round(Math.round(decisionRow.amount_due * 1.01) / graceWeekCount) });
+  const decisionRow = db.prepare(
+    `SELECT * FROM repayments WHERE loan_id = ? AND status = 'decision_pending'`
+  ).get(loan.id);
+
+  if (!decisionRow)
+    return res.status(409).json({ error: 'No pending decision.' });
+
+  const graceWeekCount = getGraceWeekCount(
+    getCurrentTrustScore(loan.shop_id) ?? 50
+  );
+
+  const total = decisionRow.amount_due;
+
+  res.json({
+    outstanding_amount: total,
+    grace_week_count: graceWeekCount,
+    interest_pct: 0,
+    total_with_interest: total,
+    per_week_amount: Math.round(total / graceWeekCount)
+  });
 });
 
 app.post('/api/loans/:loanId/grace-tick', (req, res) => {

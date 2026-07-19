@@ -48,11 +48,22 @@ const STEPS = [
     glow: 'rgba(61,42,74,0.14)',
     chipBg: 'rgba(61,42,74,0.08)',
     icon: (stroke) => (
-      <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth="2">
-        <line x1="12" y1="1" x2="12" y2="23" />
-        <path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" strokeLinecap="round" />
-      </svg>
-    ),
+  <span
+    style={{
+      color: stroke,
+      fontSize: "18px",
+      fontWeight: 700,
+      lineHeight: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "100%",
+      height: "100%",
+    }}
+  >
+    ₹
+  </span>
+),
   },
   {
     key: 'coaching',

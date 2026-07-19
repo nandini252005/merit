@@ -100,7 +100,7 @@ function enterGraceSmoothing(loan_id, trustScore) {
   if (!decisionRow) return null;
 
   const graceWeekCount = getGraceWeekCount(trustScore);
-  const interestPct = 0.01; // FLAT 1% interest applied as requested
+  const interestPct = 0; // FLAT 0% interest applied for a demo
   const totalWithInterest = Math.round(decisionRow.amount_due * (1 + interestPct));
   const evenAmount = Math.round(totalWithInterest / graceWeekCount);
 
@@ -266,7 +266,7 @@ function getNextActionableRepayment(loan_id) {
 
 function applyGracePenalty(loan_id) {
   const loan = db.prepare('SELECT * FROM loans WHERE id = ?').get(loan_id);
-  const penalty = Math.ceil(loan.outstanding_balance * 0.025); // 2.5% weekly penalty interest
+ const penalty = Math.ceil(loan.outstanding_balance * 0);
   db.prepare(`
     UPDATE loans SET outstanding_balance = outstanding_balance + ?, grace_weeks_elapsed = grace_weeks_elapsed + 1
     WHERE id = ?
