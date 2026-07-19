@@ -20,10 +20,8 @@ function PendingCard({ loan, isFlagged, actingOn, onDecision }) {
     setAnalyzing(true);
     setExpanded(true);
     try {
-      const res = await fetch(`http://localhost:5000/api/loans/${loan.id}/credit-analysis`, { method: 'POST' });
-      if (!res.ok) throw new Error("Request failed");
-      const data = await res.json();
-      setAnalysis(data);
+     const data = await api.getCreditAnalysis(loan.id);
+setAnalysis(data);
     } catch (e) {
       alert("Analysis failed: " + e.message);
     } finally {

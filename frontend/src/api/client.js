@@ -33,6 +33,7 @@ export const api = {
   getOwnerContext: (ownerId) => request(`/api/owners/${ownerId}/context`),
   enterGraceSmoothing: (loanId) => request(`/api/loans/${loanId}/enter-grace-smoothing`, { method: 'POST' }),
   gracePreview: (loanId) => request(`/api/loans/${loanId}/grace-preview`),
+  getCreditAnalysis: (loanId) => request(`/api/loans/${loanId}/credit-analysis`, { method: 'POST' }),
   resetDemoDatabase: () =>
   request('/api/demo/reset', {
     method: 'POST',
